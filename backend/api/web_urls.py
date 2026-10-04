@@ -1,0 +1,36 @@
+from django.urls import path
+
+from . import web_views
+
+urlpatterns = [
+    path("", web_views.home, name="home"),
+    path("login/", web_views.login_view, name="web-login"),
+    path("logout/", web_views.logout_view, name="web-logout"),
+    path("dashboard/", web_views.dashboard, name="dashboard"),
+    path("departments/", web_views.department_list, name="department-list"),
+    path("departments/add/", web_views.department_create, name="department-create"),
+    path("departments/<int:pk>/edit/", web_views.department_edit, name="department-edit"),
+    path("departments/<int:pk>/delete/", web_views.department_delete, name="department-delete"),
+    path("employees/", web_views.employee_list, name="employee-list"),
+    path("employees/add/", web_views.employee_create, name="employee-create"),
+    path("employees/<int:pk>/", web_views.employee_profile, name="employee-profile"),
+    path("employees/<int:pk>/edit/", web_views.employee_edit, name="employee-edit"),
+    path("employees/<int:pk>/delete/", web_views.employee_delete, name="employee-delete"),
+    path("performance/", web_views.performance_list, name="performance-list"),
+    path("performance/add/", web_views.performance_create, name="performance-create"),
+    path("performance/<int:pk>/edit/", web_views.performance_edit, name="performance-edit"),
+    path("evaluations/", web_views.evaluation_list, name="evaluation-list"),
+    path("evaluations/add/", web_views.evaluation_create, name="evaluation-create"),
+    path("evaluations/criteria/", web_views.criteria_manage, name="criteria-manage"),
+    path("evaluations/<int:pk>/", web_views.evaluation_detail, name="evaluation-detail"),
+    path("evaluations/<int:pk>/edit/", web_views.evaluation_edit, name="evaluation-edit"),
+    path("evaluations/<int:pk>/delete/", web_views.evaluation_delete, name="evaluation-delete"),
+    path("predictions/", web_views.prediction_list, name="prediction-list"),
+    path("predictions/run/", web_views.prediction_run, name="prediction-run"),
+    path("reports/", web_views.report_view, name="report-view"),
+    path("reports/export.csv", web_views.report_csv, name="report-csv"),
+    path("reports/export.pdf", web_views.report_pdf, name="report-pdf"),
+    path("accounts/", web_views.account_list, name="account-list"),
+    path("accounts/add/", web_views.account_create, name="account-create"),
+    path("settings/", web_views.settings_view, name="settings"),
+]

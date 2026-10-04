@@ -1,0 +1,19 @@
+{% extends "api/base.html" %}
+{% block title %}Reports · Lexie Performance Hub{% endblock %}
+{% block page_heading %}Reports{% endblock %}
+{% block content %}
+  <section class="mb-6"><p class="text-xs font-semibold uppercase tracking-[.16em] text-lexie-teal">Insights</p><h2 class="mt-2 text-2xl font-semibold text-lexie-ink">Performance reports</h2><p class="mt-1 text-sm text-slate-500">Filter by department and review period, then export the matching records.</p></section>
+  <section class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <form method="get" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <label class="text-xs font-medium text-slate-500">Department<select name="department" class="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm"><option value="">All departments</option>{% for department in departments %}<option value="{{ department.pk }}" {% if department.pk|stringformat:"s" == selected_department %}selected{% endif %}>{{ department.name }}</option>{% endfor %}</select></label>
+      <label class="text-xs font-medium text-slate-500">From<input type="date" name="start_date" value="{{ start_date }}" class="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm"></label>
+      <label class="text-xs font-medium text-slate-500">To<input type="date" name="end_date" value="{{ end_date }}" class="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm"></label>
+      <div class="flex items-end"><button class="rounded-lg bg-lexie-navy px-4 py-2.5 text-sm font-medium text-white">Run report</button></div>
+      <div class="flex items-end gap-2"><a href="{% url 'report-csv' %}?{{ request.GET.urlencode }}" class="rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-medium text-slate-600">CSV</a><a href="{% url 'report-pdf' %}?{{ request.GET.urlencode }}" class="rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-medium text-slate-600">PDF</a></div>
+    </form>
+  </section>
+  <section class="mt-5 grid gap-4 sm:grid-cols-2"><article class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-xs text-slate-500">Matching evaluations</p><p class="mt-2 text-2xl font-semibold text-lexie-ink">{{ record_count }}</p></article><article class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-xs text-slate-500">Average overall score</p><p class="mt-2 text-2xl font-semibold text-lexie-ink">{{ average_score|floatformat:1 }}</p></article></section>
+  <section class="mt-5 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <table class="min-w-full divide-y divide-slate-100 text-left text-sm"><thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500"><tr><th class="px-5 py-3">Employee ID</th><th class="px-5 py-3">Employee</th><th class="px-5 py-3">Department</th><th class="px-5 py-3">Date</th><th class="px-5 py-3">Score</th><th class="px-5 py-3">Evaluator</th></tr></thead><tbody class="divide-y divide-slate-100">{% for row in rows %}<tr><td class="px-5 py-3">{{ row.employee_code }}</td><td class="px-5 py-3 font-medium">{{ row.employee }}</td><td class="px-5 py-3">{{ row.department }}</td><td class="px-5 py-3">{{ row.date|date:"M j, Y" }}</td><td class="px-5 py-3 font-semibold text-lexie-teal">{{ row.score|floatformat:1 }}</td><td class="px-5 py-3">{{ row.evaluator }}</td></tr>{% empty %}<tr><td colspan="6" class="px-5 py-12 text-center text-sm text-slate-500">No records match these report filters.</td></tr>{% endfor %}</tbody></table>
+  </section>
+{% endblock %}

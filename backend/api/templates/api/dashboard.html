@@ -1,0 +1,160 @@
+{% extends "api/base.html" %}
+{% block title %}Overview · Lexie Performance Hub{% endblock %}
+{% block page_heading %}Overview{% endblock %}
+{% block content %}
+  <section class="mb-8 flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
+    <div>
+      <p class="text-xs font-semibold tracking-[.18em] text-lexie-teal">PERFORMANCE INTELLIGENCE</p>
+      <h2 class="mt-2 text-2xl font-semibold tracking-tight text-lexie-ink sm:text-3xl">Good to see you, {{ request.user.name|default:request.user.email }} <span class="text-lexie-teal">✦</span></h2>
+      <p class="mt-2 text-sm text-slate-500">{% if is_employee %}Here is a private snapshot of your performance record.{% else %}Here is a snapshot of your workforce workspace.{% endif %}</p>
+    </div>
+    <span class="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-100 bg-white px-3 py-1.5 text-xs font-medium text-slate-600">
+      <span class="h-2 w-2 rounded-full bg-emerald-500"></span> {{ request.user.get_role_display }}
+    </span>
+  </section>
+
+  {% if is_employee %}
+    {% if employee %}
+      <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7" aria-labelledby="profile-heading">
+        <div class="flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">My profile</p>
+            <h3 id="profile-heading" class="mt-2 text-xl font-semibold text-lexie-ink">{{ employee.name }}</h3>
+            <p class="mt-1 text-sm text-slate-500">{{ employee.position }} <span class="px-1">·</span> {{ employee.department.name }}</p>
+          </div>
+          <p class="rounded-lg bg-lexie-mint px-3 py-2 text-sm font-semibold text-lexie-teal">{{ employee.employee_code }}</p>
+        </div>
+        <div class="mt-6 grid gap-3 sm:grid-cols-3">
+          <div class="rounded-xl bg-slate-50 p-4"><p class="text-xs text-slate-500">Evaluations</p><p class="mt-2 text-2xl font-semibold text-lexie-ink">{{ evaluation_count }}</p></div>
+          <div class="rounded-xl bg-slate-50 p-4"><p class="text-xs text-slate-500">Latest overall score</p><p class="mt-2 text-2xl font-semibold text-lexie-ink">{% if latest_evaluation %}{{ latest_evaluation.overall_score|floatformat:1 }}{% else %}—{% endif %}</p></div>
+          <div class="rounded-xl bg-slate-50 p-4"><p class="text-xs text-slate-500">Predictions</p><p class="mt-2 text-2xl font-semibold text-lexie-ink">{{ prediction_count }}</p></div>
+        </div>
+      </section>
+      <section class="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <h3 class="font-semibold text-lexie-ink">My performance trend</h3>
+        <div class="mt-4 h-64"><canvas id="performance-trend" aria-label="Your evaluation score trend" role="img"></canvas></div>
+        {{ trend_labels|json_script:"trend-labels" }}
+        {{ trend_values|json_script:"trend-values" }}
+      </section>
+    {% else %}
+      <section class="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900" role="status">
+        Your account is not linked to an employee profile yet. Please contact an administrator.
+      </section>
+    {% endif %}
+  {% else %}
+    <section class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Workspace summary">
+      <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <p class="text-sm text-slate-500">Active employees</p>
+        <p class="mt-4 text-3xl font-semibold tracking-tight text-lexie-ink">{{ active_employee_count }}</p>
+        <p class="mt-1 text-xs text-slate-400">People in the workspace</p>
+      </article>
+      <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <p class="text-sm text-slate-500">Departments</p>
+        <p class="mt-4 text-3xl font-semibold tracking-tight text-lexie-ink">{{ department_count }}</p>
+        <p class="mt-1 text-xs text-slate-400">Active departments</p>
+      </article>
+      <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <p class="text-sm text-slate-500">Evaluations</p>
+        <p class="mt-4 text-3xl font-semibold tracking-tight text-lexie-ink">{{ evaluation_count }}</p>
+        <p class="mt-1 text-xs text-slate-400">Records on file</p>
+      </article>
+      <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <p class="text-sm text-slate-500">Predictions</p>
+        <p class="mt-4 text-3xl font-semibold tracking-tight text-lexie-ink">{{ prediction_count }}</p>
+        <p class="mt-1 text-xs text-slate-400">Saved model results</p>
+      </article>
+      <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <p class="text-sm text-slate-500">Average score</p>
+        <p class="mt-4 text-3xl font-semibold tracking-tight text-lexie-ink">{{ average_score|floatformat:1 }}</p>
+        <p class="mt-1 text-xs text-slate-400">Latest evaluation per active employee</p>
+      </article>
+      <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <p class="text-sm text-slate-500">At-risk employees</p>
+        <p class="mt-4 text-3xl font-semibold tracking-tight text-rose-700">{{ at_risk_count }}</p>
+        <p class="mt-1 text-xs text-slate-400">Latest score below 70</p>
+      </article>
+    </section>
+
+    <section class="mt-6 grid gap-6 xl:grid-cols-[1.4fr_.8fr]">
+      <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <p class="text-xs font-semibold uppercase tracking-wider text-lexie-teal">Workspace activity</p>
+        <h3 class="mt-1 text-lg font-semibold text-lexie-ink">Performance trend</h3>
+        <div class="mt-4 h-72"><canvas id="performance-trend" aria-label="Average monthly performance trend" role="img"></canvas></div>
+      </div>
+      <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <p class="text-xs font-semibold uppercase tracking-wider text-lexie-teal">Department performance</p>
+        <h3 class="mt-1 text-lg font-semibold text-lexie-ink">Average score by department</h3>
+        <div class="mt-4 h-72"><canvas id="department-scores" aria-label="Average performance score by department" role="img"></canvas></div>
+      </div>
+    </section>
+    <section class="mt-6 grid gap-6 xl:grid-cols-2">
+      <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h3 class="font-semibold text-lexie-ink">Top performers</h3>
+        <div class="mt-3 divide-y divide-slate-100">{% for employee in top_performers %}<a href="{% url 'employee-profile' employee.pk %}" class="flex items-center justify-between gap-3 py-3 hover:text-lexie-teal"><span><span class="block text-sm font-medium">{{ employee.name }}</span><span class="mt-1 block text-xs text-slate-500">{{ employee.department.name }}</span></span><span class="font-semibold text-lexie-teal">{{ employee.dashboard_score|floatformat:1 }}</span></a>{% empty %}<p class="py-5 text-sm text-slate-500">No evaluation scores available yet.</p>{% endfor %}</div>
+      </div>
+      <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h3 class="font-semibold text-lexie-ink">At-risk employees</h3>
+        <div class="mt-3 divide-y divide-slate-100">{% for employee in at_risk_employees %}<a href="{% url 'employee-profile' employee.pk %}" class="flex items-center justify-between gap-3 py-3 hover:text-rose-700"><span><span class="block text-sm font-medium">{{ employee.name }}</span><span class="mt-1 block text-xs text-slate-500">{{ employee.department.name }}</span></span><span class="font-semibold text-rose-700">{{ employee.dashboard_score|floatformat:1 }}</span></a>{% empty %}<p class="py-5 text-sm text-slate-500">No active employees are currently below the risk threshold.</p>{% endfor %}</div>
+      </div>
+    </section>
+    {{ trend_labels|json_script:"trend-labels" }}
+    {{ trend_values|json_script:"trend-values" }}
+    {{ department_labels|json_script:"department-labels" }}
+    {{ department_averages|json_script:"department-values" }}
+  {% endif %}
+{% endblock %}
+{% block page_scripts %}
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    (() => {
+      const readData = (id) => {
+        const node = document.getElementById(id);
+        return node ? JSON.parse(node.textContent) : [];
+      };
+      const trendCanvas = document.getElementById("performance-trend");
+      if (trendCanvas) {
+        new Chart(trendCanvas, {
+          type: "line",
+          data: {
+            labels: readData("trend-labels"),
+            datasets: [{
+              label: "Average score",
+              data: readData("trend-values"),
+              borderColor: "#0e8f88",
+              backgroundColor: "rgba(14,143,136,.12)",
+              fill: true,
+              tension: .35
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: { y: { min: 0, max: 100 } },
+            plugins: { legend: { display: false } }
+          }
+        });
+      }
+      const departmentCanvas = document.getElementById("department-scores");
+      if (departmentCanvas) {
+        new Chart(departmentCanvas, {
+          type: "bar",
+          data: {
+            labels: readData("department-labels"),
+            datasets: [{
+              label: "Average score",
+              data: readData("department-values"),
+              backgroundColor: "#0e8f88",
+              borderRadius: 6
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: { y: { min: 0, max: 100 } },
+            plugins: { legend: { display: false } }
+          }
+        });
+      }
+    })();
+  </script>
+{% endblock %}

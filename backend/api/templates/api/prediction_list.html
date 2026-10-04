@@ -1,0 +1,38 @@
+{% extends "api/base.html" %}
+{% block title %}Predictions · Lexie Performance Hub{% endblock %}
+{% block page_heading %}Predictions{% endblock %}
+{% block content %}
+  <section class="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+    <div><p class="text-xs font-semibold uppercase tracking-[.16em] text-lexie-teal">Model insights</p><h2 class="mt-2 text-2xl font-semibold text-lexie-ink">Predictions</h2><p class="mt-1 text-sm text-slate-500">Model predictions are based on the latest saved evaluation for each employee.</p></div>
+    {% if can_predict %}<form method="post" action="{% url 'prediction-run' %}">{% csrf_token %}<input type="hidden" name="action" value="batch"><button class="rounded-lg border border-lexie-teal px-4 py-2.5 text-sm font-semibold text-lexie-teal hover:bg-lexie-mint">Run batch predictions</button></form>{% endif %}
+  </section>
+  {% if can_predict %}
+    <form method="post" action="{% url 'prediction-run' %}" class="mb-6 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-end">
+      {% csrf_token %}<input type="hidden" name="action" value="single">
+      <label class="flex-1 text-xs font-medium text-slate-500">Employee
+        <select name="employee_id" required class="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm"><option value="">Select an employee</option>{% for employee in employees %}<option value="{{ employee.pk }}">{{ employee.name }} · {{ employee.department.name }}</option>{% endfor %}</select>
+      </label>
+      <button class="rounded-lg bg-lexie-teal px-4 py-2.5 text-sm font-semibold text-white">Run prediction</button>
+    </form>
+  {% endif %}
+  {% if importance %}
+    <section class="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h3 class="font-semibold text-lexie-ink">Latest model feature importance</h3>
+      <div class="mt-4 grid gap-3 sm:grid-cols-2">
+        {% for name, value in importance %}
+          <div><div class="mb-1 flex justify-between gap-3 text-xs"><span class="text-slate-600">{{ name|title }}</span><span class="font-medium text-lexie-ink">{{ value|floatformat:3 }}</span></div><div class="h-2 overflow-hidden rounded-full bg-slate-100"><div class="h-full rounded-full bg-lexie-teal" style="width:{% widthratio value 1 100 %}%"></div></div></div>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
+  <section class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <form method="get" class="flex flex-wrap items-end gap-3 border-b border-slate-100 p-4">
+      {% if can_predict %}<label class="text-xs font-medium text-slate-500">Employee<select name="employee" class="mt-1 block min-w-56 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"><option value="">All employees</option>{% for employee in employees %}<option value="{{ employee.pk }}" {% if employee.pk|stringformat:"s" == selected_employee %}selected{% endif %}>{{ employee.name }}</option>{% endfor %}</select></label>{% endif %}
+      <button class="rounded-lg bg-lexie-navy px-4 py-2 text-sm text-white">Filter</button>
+    </form>
+    <div class="overflow-x-auto"><table class="min-w-full divide-y divide-slate-100 text-left text-sm">
+      <thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500"><tr><th class="px-5 py-3">Created</th><th class="px-5 py-3">Employee</th><th class="px-5 py-3">Predicted level</th><th class="px-5 py-3">Confidence</th><th class="px-5 py-3">Model</th></tr></thead>
+      <tbody class="divide-y divide-slate-100">      {% for prediction in predictions %}<tr><td class="whitespace-nowrap px-5 py-3 text-slate-600">{{ prediction.created_at|date:"M j, Y H:i" }}</td><td class="px-5 py-3 font-medium text-lexie-ink">{{ prediction.employee.name }}</td><td class="px-5 py-3">{{ prediction.predicted_category }}</td><td class="px-5 py-3 font-semibold text-lexie-teal">{% widthratio prediction.confidence_score 1 100 %}%</td><td class="px-5 py-3 text-xs text-slate-500">{{ prediction.model_version }}</td></tr>{% empty %}<tr><td colspan="5" class="px-5 py-12 text-center text-sm text-slate-500">No prediction results are available.</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </section>
+{% endblock %}

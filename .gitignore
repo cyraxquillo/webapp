@@ -1,0 +1,25 @@
+# Local credentials and configuration
+.env
+backend/.env
+
+# Python environments and generated files
+.venv/
+venv/
+backend/venv/
+backend/.venv/
+__pycache__/
+*.py[cod]
+
+# Local databases and logs
+backend/*.sqlite3
+backend/*.db
+*.log
+
+# JavaScript dependencies and generated output (source remains in the repository)
+node_modules/
+dist/
+
+# Editor and operating-system files
+.vscode/
+.DS_Store
+Thumbs.db

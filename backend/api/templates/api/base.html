@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#123b4a">
+  <title>{% block title %}Lexie Performance Hub{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            lexie: {
+              ink: "#193845",
+              navy: "#123b4a",
+              teal: "#0e8f88",
+              mint: "#e8f5f1",
+              canvas: "#f5f8f8"
+            }
+          },
+          fontFamily: { sans: ["DM Sans", "ui-sans-serif", "system-ui", "sans-serif"] }
+        }
+      }
+    };
+  </script>
+  <style>
+    body { font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif; }
+    .sidebar-link { transition: background-color .16s ease, color .16s ease; }
+    .sidebar-link:hover, .sidebar-link[aria-current="page"] { background: rgba(255,255,255,.1); color: #fff; }
+    @media (max-width: 767px) {
+      #sidebar[data-open="false"] { transform: translateX(-100%); }
+      #sidebar[data-open="true"] { transform: translateX(0); }
+      #sidebar-backdrop[data-open="false"] { display: none; }
+      #sidebar-backdrop[data-open="true"] { display: block; }
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-lexie-canvas text-lexie-ink antialiased">
+  {% if request.user.is_authenticated %}
+    <div id="sidebar-backdrop" data-open="false" class="fixed inset-0 z-30 bg-lexie-navy/50 md:hidden" aria-hidden="true"></div>
+    <aside id="sidebar" data-open="false" class="fixed inset-y-0 left-0 z-40 flex w-64 -translate-x-full flex-col bg-lexie-navy px-4 py-6 text-slate-200 transition-transform duration-200 md:translate-x-0">
+      <a href="{% url 'dashboard' %}" class="flex items-center gap-3 px-2 text-xl font-bold tracking-tight text-white" aria-label="Lexie Performance Hub home">
+        <span class="grid h-9 w-9 place-items-center rounded-xl bg-lexie-teal text-lg">✦</span>
+        <span>lexie<span class="text-emerald-300">.</span></span>
+      </a>
+      <div class="mt-8 rounded-xl border border-white/10 bg-white/5 px-3 py-3">
+        <p class="text-xs font-semibold text-white">Lexie workspace</p>
+        <p class="mt-1 text-xs text-slate-400">{{ request.user.get_role_display }}</p>
+      </div>
+      <nav class="mt-7 space-y-1" aria-label="Main navigation">
+        <a href="{% url 'dashboard' %}" aria-current="page" class="sidebar-link flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300">
+          <span aria-hidden="true">◫</span> Overview
+        </a>
+        <p class="px-3 pt-5 text-[10px] font-semibold uppercase tracking-[.16em] text-slate-500">Workspace</p>
+        {% if request.user.role == "admin" or request.user.role == "hr_manager" %}
+          <a href="{% url 'employee-list' %}" class="sidebar-link flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-300"><span aria-hidden="true">♙</span> Employees</a>
+          <a href="{% url 'department-list' %}" class="sidebar-link flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-300"><span aria-hidden="true">▦</span> Departments</a>
+        {% else %}
+          <a href="{% url 'employee-list' %}" class="sidebar-link flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-300"><span aria-hidden="true">♙</span> My profile</a>
+        {% endif %}
+        <a href="{% url 'performance-list' %}" class="sidebar-link flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-300"><span aria-hidden="true">▤</span> Performance</a>
+        <a href="{% url 'evaluation-list' %}" class="sidebar-link flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-300"><span aria-hidden="true">✓</span> Evaluations</a>
+        <a href="{% url 'prediction-list' %}" class="sidebar-link flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-300"><span aria-hidden="true">⌁</span> Predictions</a>
+        {% if request.user.role == "admin" or request.user.role == "hr_manager" %}
+          <a href="{% url 'report-view' %}" class="sidebar-link flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-300"><span aria-hidden="true">▥</span> Reports</a>
+        {% endif %}
+        {% if request.user.role == "admin" %}
+          <a href="{% url 'account-list' %}" class="sidebar-link flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-300"><span aria-hidden="true">♧</span> User accounts</a>
+        {% endif %}
+        <a href="{% url 'settings' %}" class="sidebar-link flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-300"><span aria-hidden="true">⚙</span> Settings</a>
+      </nav>
+      <div class="mt-auto border-t border-white/10 pt-4">
+        <p class="truncate px-2 text-sm font-semibold text-white">{{ request.user.name }}</p>
+        <p class="truncate px-2 pt-1 text-xs text-slate-400">{{ request.user.email }}</p>
+        <form method="post" action="{% url 'web-logout' %}" class="mt-4">
+          {% csrf_token %}
+          <button type="submit" class="sidebar-link flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-slate-300">
+            <span aria-hidden="true">↪</span> Sign out
+          </button>
+        </form>
+      </div>
+    </aside>
+    <div class="min-h-screen md:pl-64">
+      <header class="sticky top-0 z-20 flex h-[76px] items-center justify-between border-b border-slate-200/80 bg-white/90 px-4 backdrop-blur md:px-8">
+        <div class="flex items-center gap-3">
+          <button id="menu-toggle" type="button" class="grid h-10 w-10 place-items-center rounded-lg border border-slate-200 text-lg text-lexie-navy md:hidden" aria-label="Open navigation" aria-expanded="false">☰</button>
+          <div>
+            <p class="text-xs text-slate-400">Workspace <span class="px-1">/</span> Overview</p>
+            <h1 class="mt-0.5 text-lg font-semibold text-lexie-ink">{% block page_heading %}{{ page_title|default:"Overview" }}{% endblock %}</h1>
+          </div>
+        </div>
+        <div class="hidden items-center gap-3 sm:flex">
+          <span class="grid h-9 w-9 place-items-center rounded-full bg-lexie-mint text-sm font-bold text-lexie-teal">{{ request.user.name|slice:":1"|upper }}</span>
+          <span class="text-sm font-medium text-lexie-ink">{{ request.user.name }}</span>
+        </div>
+      </header>
+      <main class="mx-auto max-w-7xl px-4 py-7 md:px-8 md:py-9">
+        {% if messages %}
+          <div class="mb-5 space-y-2" aria-live="polite">
+            {% for message in messages %}
+              <div class="rounded-xl border px-4 py-3 text-sm {% if message.tags == 'error' %}border-rose-200 bg-rose-50 text-rose-800{% else %}border-emerald-200 bg-emerald-50 text-emerald-800{% endif %}">{{ message }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+    <script>
+      (() => {
+        const sidebar = document.getElementById("sidebar");
+        const backdrop = document.getElementById("sidebar-backdrop");
+        const toggle = document.getElementById("menu-toggle");
+        const setOpen = (open) => {
+          sidebar.dataset.open = String(open);
+          backdrop.dataset.open = String(open);
+          toggle.setAttribute("aria-expanded", String(open));
+        };
+        toggle.addEventListener("click", () => setOpen(sidebar.dataset.open !== "true"));
+        backdrop.addEventListener("click", () => setOpen(false));
+        document.addEventListener("keydown", (event) => {
+          if (event.key === "Escape") setOpen(false);
+        });
+      })();
+    </script>
+  {% else %}
+    {% block unauthenticated_content %}{% endblock %}
+  {% endif %}
+  {% block page_scripts %}{% endblock %}
+</body>
+</html>

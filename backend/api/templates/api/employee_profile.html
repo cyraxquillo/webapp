@@ -1,0 +1,46 @@
+{% extends "api/base.html" %}
+{% block title %}{{ employee.name }} · Lexie Performance Hub{% endblock %}
+{% block page_heading %}Employee profile{% endblock %}
+{% block content %}
+  <section class="mb-6 flex flex-col justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:p-7">
+    <div>
+      <p class="text-xs font-semibold uppercase tracking-wider text-lexie-teal">{{ employee.employee_code }}</p>
+      <h2 class="mt-2 text-2xl font-semibold tracking-tight text-lexie-ink">{{ employee.name }}</h2>
+      <p class="mt-1 text-sm text-slate-500">{{ employee.position }} · {{ employee.department.name }}</p>
+    </div>
+    {% if can_manage %}
+      <div class="flex flex-wrap gap-2">
+        <a href="{% url 'employee-edit' employee.pk %}" class="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600">Edit profile</a>
+        <a href="{% url 'employee-delete' employee.pk %}" class="rounded-lg border border-rose-200 px-4 py-2 text-sm font-medium text-rose-700">Delete</a>
+      </div>
+    {% endif %}
+  </section>
+  <section class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <article class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-xs text-slate-500">Status</p><p class="mt-2 font-semibold text-lexie-ink">{{ employee.status|title }}</p></article>
+    <article class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-xs text-slate-500">Date hired</p><p class="mt-2 font-semibold text-lexie-ink">{{ employee.date_hired|date:"M j, Y" }}</p></article>
+    <article class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-xs text-slate-500">Attendance</p><p class="mt-2 font-semibold text-lexie-ink">{{ employee.attendance_rate|floatformat:1 }}%</p></article>
+    <article class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-xs text-slate-500">Training hours</p><p class="mt-2 font-semibold text-lexie-ink">{{ employee.training_hours|floatformat:1 }}</p></article>
+  </section>
+  <section class="mt-6 grid gap-6 xl:grid-cols-2">
+    <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div class="flex items-center justify-between"><h3 class="font-semibold text-lexie-ink">Evaluations</h3><a href="{% url 'evaluation-list' %}?employee={{ employee.pk }}" class="text-xs font-medium text-lexie-teal">View all</a></div>
+      <div class="mt-4 divide-y divide-slate-100">
+        {% for evaluation in evaluations %}
+          <a href="{% url 'evaluation-detail' evaluation.pk %}" class="flex items-center justify-between gap-3 py-3 text-sm hover:text-lexie-teal">
+            <span>{{ evaluation.date|date:"M j, Y" }}</span><span class="font-semibold">{{ evaluation.overall_score|floatformat:1 }}</span>
+          </a>
+        {% empty %}<p class="py-7 text-center text-sm text-slate-500">No evaluations recorded.</p>{% endfor %}
+      </div>
+    </div>
+    <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div class="flex items-center justify-between"><h3 class="font-semibold text-lexie-ink">Predictions</h3><a href="{% url 'prediction-list' %}?employee={{ employee.pk }}" class="text-xs font-medium text-lexie-teal">View all</a></div>
+      <div class="mt-4 divide-y divide-slate-100">
+        {% for prediction in predictions %}
+          <div class="flex items-center justify-between gap-3 py-3 text-sm">
+            <span>{{ prediction.predicted_category }} · {{ prediction.created_at|date:"M j, Y" }}</span><span class="font-semibold">{{ prediction.confidence_score|floatformat:1 }}%</span>
+          </div>
+        {% empty %}<p class="py-7 text-center text-sm text-slate-500">No predictions recorded.</p>{% endfor %}
+      </div>
+    </div>
+  </section>
+{% endblock %}

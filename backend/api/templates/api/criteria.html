@@ -1,0 +1,15 @@
+{% extends "api/base.html" %}
+{% block title %}Evaluation criteria · Lexie Performance Hub{% endblock %}
+{% block page_heading %}Evaluation criteria{% endblock %}
+{% block content %}
+  <section class="mx-auto max-w-2xl">
+    <div class="mb-6"><p class="text-xs font-semibold uppercase tracking-[.16em] text-lexie-teal">Admin settings</p><h2 class="mt-2 text-2xl font-semibold text-lexie-ink">Evaluation criteria</h2><p class="mt-1 text-sm leading-6 text-slate-500">Rename the five score categories used by every evaluation. The underlying score fields and stored records are unchanged.</p></div>
+    <form method="post" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+      {% csrf_token %}
+      {% for field, label in criteria.items %}
+        <label class="mb-5 block text-sm font-medium text-slate-700">{{ label }} label<input type="text" name="{{ field }}" value="{{ label }}" maxlength="80" required class="mt-2 block w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-lexie-teal focus:ring-4 focus:ring-lexie-teal/10"></label>
+      {% endfor %}
+      <div class="flex justify-end gap-3 border-t border-slate-100 pt-5"><a href="{% url 'evaluation-list' %}" class="rounded-lg border border-slate-200 px-4 py-2.5 text-sm text-slate-600">Cancel</a><button class="rounded-lg bg-lexie-teal px-5 py-2.5 text-sm font-semibold text-white">Save criteria</button></div>
+    </form>
+  </section>
+{% endblock %}
