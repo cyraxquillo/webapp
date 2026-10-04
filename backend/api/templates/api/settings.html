@@ -8,13 +8,13 @@
       {% csrf_token %}<input type="hidden" name="form_action" value="profile">
       <h3 class="text-lg font-semibold text-lexie-ink">Profile</h3><p class="mb-5 mt-1 text-sm text-slate-500">Manage the name and email associated with your account.</p>
       {% for field in profile_form %}<div class="mb-4"><label for="{{ field.id_for_label }}" class="block text-sm font-medium text-slate-700">{{ field.label }}</label>{{ field }}{% for error in field.errors %}<p class="mt-1 text-xs text-rose-700">{{ error }}</p>{% endfor %}</div>{% endfor %}
-      <button class="mt-2 rounded-lg bg-lexie-teal px-4 py-2.5 text-sm font-semibold text-white">Save profile</button>
+      <button class="mt-2 rounded-lg bg-lexie-teal px-4 py-2.5 text-sm font-semibold text-white"><i data-lucide="save"></i> Save profile</button>
     </form>
     <form method="post" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
       {% csrf_token %}<input type="hidden" name="form_action" value="password">
       <h3 class="text-lg font-semibold text-lexie-ink">Change password</h3><p class="mb-5 mt-1 text-sm text-slate-500">Your other signed-in sessions may be logged out.</p>
       {% for field in password_form %}<div class="mb-4"><label for="{{ field.id_for_label }}" class="block text-sm font-medium text-slate-700">{{ field.label }}</label>{{ field }}{% if field.help_text %}<p class="mt-1 text-xs text-slate-500">{{ field.help_text|safe }}</p>{% endif %}{% for error in field.errors %}<p class="mt-1 text-xs text-rose-700">{{ error }}</p>{% endfor %}</div>{% endfor %}
-      <button class="mt-2 rounded-lg bg-lexie-teal px-4 py-2.5 text-sm font-semibold text-white">Change password</button>
+      <button class="mt-2 rounded-lg bg-lexie-teal px-4 py-2.5 text-sm font-semibold text-white"><i data-lucide="key-round"></i> Change password</button>
     </form>
   </div>
 {% endblock %}

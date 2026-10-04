@@ -4,12 +4,12 @@
 {% block content %}
   <section class="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
     <div>
-      <p class="text-xs font-semibold uppercase tracking-[.16em] text-lexie-teal">Workspace</p>
+      <p class="eyebrow">Workspace</p>
       <h2 class="mt-2 text-2xl font-semibold tracking-tight text-lexie-ink">{{ title }}</h2>
       <p class="mt-1 text-sm text-slate-500">{{ description }}</p>
     </div>
     {% if create_url %}
-      <a href="{% url create_url %}" class="inline-flex items-center justify-center gap-2 rounded-lg bg-lexie-teal px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-700">＋ Add {{ title|lower|slice:":-1" }}</a>
+      <a href="{% url create_url %}" class="inline-flex items-center justify-center gap-2 rounded-lg bg-lexie-teal px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-700"><i data-lucide="plus" aria-hidden="true"></i> Add {{ title|lower|slice:":-1" }}</a>
     {% endif %}
   </section>
   <section class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -38,6 +38,24 @@
       </div>
     </form>
     <div class="overflow-x-auto">
+      {% if title == "Employees" %}
+      <table class="min-w-full divide-y divide-slate-100 text-left text-sm">
+        <thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500"><tr><th>Employee</th><th>Department</th><th>Position</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td><a href="{{ row.url }}" class="person-cell"><span class="avatar">{{ row.cells.1|slice:":1"|upper }}</span><span><strong>{{ row.cells.1 }}</strong><small>{{ row.cells.0 }}</small></span></a></td>
+              <td>{{ row.cells.2 }}</td>
+              <td>{{ row.cells.3 }}</td>
+              <td><span class="status-badge {% if row.cells.4 == 'Active' %}success{% else %}warning{% endif %}">{{ row.cells.4 }}</span></td>
+              <td><a href="{{ row.url }}" class="icon-button" aria-label="Open {{ row.cells.1 }}"><i data-lucide="arrow-up-right"></i></a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5" class="px-5 py-12 text-center text-sm text-slate-500">{{ empty_message }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
       <table class="min-w-full divide-y divide-slate-100 text-left text-sm">
         <thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
           <tr>{% for header in headers %}<th scope="col" class="px-5 py-3.5 font-semibold">{{ header }}</th>{% endfor %}</tr>
@@ -47,7 +65,7 @@
             <tr class="hover:bg-slate-50">
               {% for cell in row.cells %}
                 <td class="whitespace-nowrap px-5 py-3.5 {% if forloop.first %}font-medium text-lexie-ink{% else %}text-slate-600{% endif %}">
-                  {% if forloop.first %}<a href="{{ row.url }}" class="hover:text-lexie-teal">{{ cell }}</a>{% else %}{{ cell }}{% endif %}
+                  {% if forloop.first %}<a href="{{ row.url }}" class="hover:text-lexie-teal">{{ cell }}</a>{% elif cell == "Active" or cell == "Inactive" %}<span class="status-badge {% if cell == 'Active' %}success{% else %}warning{% endif %}">{{ cell }}</span>{% else %}{{ cell }}{% endif %}
                 </td>
               {% endfor %}
             </tr>
@@ -56,6 +74,7 @@
           {% endfor %}
         </tbody>
       </table>
+      {% endif %}
     </div>
   </section>
 {% endblock %}

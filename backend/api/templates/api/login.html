@@ -1,49 +1,49 @@
 {% extends "api/base.html" %}
 {% block title %}Sign in · Lexie Performance Hub{% endblock %}
 {% block unauthenticated_content %}
-  <main class="grid min-h-screen lg:grid-cols-[1.05fr_.95fr]">
-    <section class="relative flex min-h-[360px] flex-col justify-between overflow-hidden bg-lexie-navy px-7 py-8 text-white sm:px-12 sm:py-10 lg:min-h-screen lg:px-16">
-      <div class="absolute -right-24 -top-20 h-80 w-80 rounded-full border border-white/10"></div>
-      <div class="absolute -right-6 top-12 h-64 w-64 rounded-full border border-emerald-300/10"></div>
-      <a href="{% url 'home' %}" class="relative flex items-center gap-3 text-xl font-bold tracking-tight">
-        <span class="grid h-9 w-9 place-items-center rounded-xl bg-lexie-teal text-lg">✦</span>
-        <span>lexie<span class="text-emerald-300">.</span></span>
+  <main class="login-page">
+    <section class="login-art">
+      <a href="{% url 'home' %}" class="brand" aria-label="Lexie Performance Hub home">
+        <span class="brand-mark"><i data-lucide="sparkles" aria-hidden="true"></i></span>
+        <span>lexie<span class="brand-dot">.</span></span>
       </a>
-      <div class="relative my-12 max-w-xl">
-        <p class="text-xs font-semibold tracking-[.2em] text-emerald-300">PERFORMANCE INTELLIGENCE</p>
-        <h1 class="mt-5 text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">Make every <span class="text-emerald-300">contribution</span> count.</h1>
-        <p class="mt-5 max-w-md text-base leading-7 text-slate-300">A clearer view of people performance, built for the teams shaping what comes next.</p>
+      <div class="art-copy">
+        <p class="eyebrow">PERFORMANCE INTELLIGENCE</p>
+        <h1>Make every<br><em>contribution</em><br>count.</h1>
+        <p>A clearer view of people performance, built for the teams shaping what comes next.</p>
       </div>
-      <p class="relative text-xs text-slate-400">Lexie Staffing &amp; Business Consulting <span class="px-2">·</span> © 2026</p>
+      <p class="art-footer"><span>Lexie Staffing &amp; Business Consulting</span><span>© 2026</span></p>
     </section>
-    <section class="flex items-center justify-center bg-white px-6 py-12 sm:px-10">
-      <div class="w-full max-w-md">
-        <p class="text-xs font-semibold tracking-[.18em] text-lexie-teal">WELCOME BACK</p>
-        <h2 class="mt-3 text-3xl font-semibold tracking-tight text-lexie-ink">Sign in to your workspace</h2>
-        <p class="mt-2 text-sm text-slate-500">Use your Lexie account credentials.</p>
+    <section class="login-panel">
+      <div class="login-card">
+        <div class="login-heading">
+          <p class="eyebrow">WELCOME BACK</p>
+          <h2>Sign in to your workspace</h2>
+          <p>Use your Lexie account credentials.</p>
+        </div>
         {% if messages %}
-          <div class="mt-6 space-y-2" aria-live="polite">
+          <div class="login-messages" aria-live="polite">
             {% for message in messages %}
-              <p class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800" role="alert">{{ message }}</p>
+              <p role="alert">{{ message }}</p>
             {% endfor %}
           </div>
         {% endif %}
-        <form method="post" class="mt-8 space-y-5">
+        <form method="post">
           {% csrf_token %}
           <input type="hidden" name="next" value="{{ request.GET.next }}">
-          <label class="block text-sm font-medium text-slate-700">
+          <label>
             Email address
-            <input type="email" name="email" value="{{ email|default:'admin@lexie.ph' }}" autocomplete="username" required autofocus class="mt-2 block w-full rounded-lg border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-lexie-teal focus:ring-4 focus:ring-lexie-teal/10">
+            <input type="email" name="email" value="{{ email|default:'admin@lexie.ph' }}" autocomplete="username" required autofocus>
           </label>
-          <label class="block text-sm font-medium text-slate-700">
+          <label>
             Password
-            <input type="password" name="password" autocomplete="current-password" required class="mt-2 block w-full rounded-lg border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-lexie-teal focus:ring-4 focus:ring-lexie-teal/10">
+            <input type="password" name="password" autocomplete="current-password" required>
           </label>
-          <button type="submit" class="flex w-full items-center justify-center gap-2 rounded-lg bg-lexie-teal px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-700 focus:outline-none focus:ring-4 focus:ring-lexie-teal/20">
-            Enter workspace <span aria-hidden="true">↗</span>
+          <button type="submit" class="primary-button">
+            Enter workspace <i data-lucide="arrow-up-right" aria-hidden="true"></i>
           </button>
         </form>
-        <p class="mt-6 flex items-center gap-2 text-xs text-slate-500"><span class="text-lexie-teal">●</span> Seeded admin account is available for local testing.</p>
+        <p class="demo-note"><i data-lucide="circle-check" aria-hidden="true"></i> Seeded admin account is prefilled for local testing.</p>
       </div>
     </section>
   </main>

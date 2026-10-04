@@ -4,7 +4,7 @@
 {% block content %}
   <section class="mx-auto max-w-3xl">
     <div class="mb-6">
-      <p class="text-xs font-semibold uppercase tracking-[.16em] text-lexie-teal">Workspace</p>
+      <p class="eyebrow">WORKSPACE</p>
       <h2 class="mt-2 text-2xl font-semibold tracking-tight text-lexie-ink">{{ title }}</h2>
       {% if form.instance.pk and form.instance.overall_score %}<p class="mt-1 text-sm text-slate-500">Current overall score: {{ form.instance.overall_score|floatformat:2 }}</p>{% endif %}
     </div>
@@ -43,7 +43,7 @@
         {% else %}
           <a href="{% url cancel_url %}" class="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600">Cancel</a>
         {% endif %}
-        <button type="submit" class="rounded-lg bg-lexie-teal px-5 py-2.5 text-sm font-semibold text-white hover:bg-teal-700">Save changes</button>
+        <button type="submit" class="rounded-lg bg-lexie-teal px-5 py-2.5 text-sm font-semibold text-white hover:bg-teal-700"><i data-lucide="save"></i> Save changes</button>
       </div>
     </form>
   </section>

@@ -9,7 +9,7 @@
       {% for field, label in criteria.items %}
         <label class="mb-5 block text-sm font-medium text-slate-700">{{ label }} label<input type="text" name="{{ field }}" value="{{ label }}" maxlength="80" required class="mt-2 block w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-lexie-teal focus:ring-4 focus:ring-lexie-teal/10"></label>
       {% endfor %}
-      <div class="flex justify-end gap-3 border-t border-slate-100 pt-5"><a href="{% url 'evaluation-list' %}" class="rounded-lg border border-slate-200 px-4 py-2.5 text-sm text-slate-600">Cancel</a><button class="rounded-lg bg-lexie-teal px-5 py-2.5 text-sm font-semibold text-white">Save criteria</button></div>
+      <div class="flex justify-end gap-3 border-t border-slate-100 pt-5"><a href="{% url 'evaluation-list' %}" class="rounded-lg border border-slate-200 px-4 py-2.5 text-sm text-slate-600">Cancel</a><button class="rounded-lg bg-lexie-teal px-5 py-2.5 text-sm font-semibold text-white"><i data-lucide="save"></i> Save criteria</button></div>
     </form>
   </section>
 {% endblock %}

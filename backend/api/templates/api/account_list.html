@@ -3,8 +3,8 @@
 {% block page_heading %}User accounts{% endblock %}
 {% block content %}
   <section class="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-    <div><p class="text-xs font-semibold uppercase tracking-[.16em] text-lexie-teal">Admin</p><h2 class="mt-2 text-2xl font-semibold text-lexie-ink">User accounts</h2><p class="mt-1 text-sm text-slate-500">{{ accounts }} active workforce account records.</p></div>
-    <a href="{% url 'account-create' %}" class="rounded-lg bg-lexie-teal px-4 py-2.5 text-sm font-semibold text-white">＋ Create account</a>
+    <div><p class="eyebrow">ADMINISTRATION</p><h2 class="mt-2 text-2xl font-semibold text-lexie-ink">User accounts</h2><p class="mt-1 text-sm text-slate-500">{{ accounts }} active workforce account records.</p></div>
+    <a href="{% url 'account-create' %}" class="rounded-lg bg-lexie-teal px-4 py-2.5 text-sm font-semibold text-white"><i data-lucide="plus"></i> Create account</a>
   </section>
   <section class="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
     <table class="min-w-full divide-y divide-slate-100 text-left text-sm"><thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500"><tr><th class="px-5 py-3">Name</th><th class="px-5 py-3">Email</th><th class="px-5 py-3">Role</th><th class="px-5 py-3">Linked employee</th><th class="px-5 py-3">Status</th></tr></thead>

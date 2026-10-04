@@ -2,15 +2,12 @@
 {% block title %}Overview · Lexie Performance Hub{% endblock %}
 {% block page_heading %}Overview{% endblock %}
 {% block content %}
-  <section class="mb-8 flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
+  <section class="welcome-row mb-8 flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
     <div>
-      <p class="text-xs font-semibold tracking-[.18em] text-lexie-teal">PERFORMANCE INTELLIGENCE</p>
-      <h2 class="mt-2 text-2xl font-semibold tracking-tight text-lexie-ink sm:text-3xl">Good to see you, {{ request.user.name|default:request.user.email }} <span class="text-lexie-teal">✦</span></h2>
+      <p class="eyebrow">PERFORMANCE INTELLIGENCE</p>
+      <h2 class="mt-2 text-2xl font-semibold tracking-tight text-lexie-ink sm:text-3xl">Good morning, {{ request.user.name|default:request.user.email }}<span> ✦</span></h2>
       <p class="mt-2 text-sm text-slate-500">{% if is_employee %}Here is a private snapshot of your performance record.{% else %}Here is a snapshot of your workforce workspace.{% endif %}</p>
     </div>
-    <span class="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-100 bg-white px-3 py-1.5 text-xs font-medium text-slate-600">
-      <span class="h-2 w-2 rounded-full bg-emerald-500"></span> {{ request.user.get_role_display }}
-    </span>
   </section>
 
   {% if is_employee %}
@@ -42,60 +39,53 @@
       </section>
     {% endif %}
   {% else %}
-    <section class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Workspace summary">
-      <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <p class="text-sm text-slate-500">Active employees</p>
-        <p class="mt-4 text-3xl font-semibold tracking-tight text-lexie-ink">{{ active_employee_count }}</p>
-        <p class="mt-1 text-xs text-slate-400">People in the workspace</p>
-      </article>
-      <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <p class="text-sm text-slate-500">Departments</p>
-        <p class="mt-4 text-3xl font-semibold tracking-tight text-lexie-ink">{{ department_count }}</p>
-        <p class="mt-1 text-xs text-slate-400">Active departments</p>
-      </article>
-      <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <p class="text-sm text-slate-500">Evaluations</p>
-        <p class="mt-4 text-3xl font-semibold tracking-tight text-lexie-ink">{{ evaluation_count }}</p>
-        <p class="mt-1 text-xs text-slate-400">Records on file</p>
-      </article>
-      <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <p class="text-sm text-slate-500">Predictions</p>
-        <p class="mt-4 text-3xl font-semibold tracking-tight text-lexie-ink">{{ prediction_count }}</p>
-        <p class="mt-1 text-xs text-slate-400">Saved model results</p>
-      </article>
-      <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <p class="text-sm text-slate-500">Average score</p>
-        <p class="mt-4 text-3xl font-semibold tracking-tight text-lexie-ink">{{ average_score|floatformat:1 }}</p>
-        <p class="mt-1 text-xs text-slate-400">Latest evaluation per active employee</p>
-      </article>
-      <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <p class="text-sm text-slate-500">At-risk employees</p>
-        <p class="mt-4 text-3xl font-semibold tracking-tight text-rose-700">{{ at_risk_count }}</p>
-        <p class="mt-1 text-xs text-slate-400">Latest score below 70</p>
-      </article>
+    <section class="stats-grid" aria-label="Workspace summary">
+    <article class="stat-card">
+      <div class="stat-head"><span>Total employees</span><span class="stat-icon"><i data-lucide="users"></i></span></div>
+      <strong class="stat-value">{{ active_employee_count }}</strong>
+      <div class="stat-detail">Active employees</div>
+    </article>
+    <article class="stat-card">
+      <div class="stat-head"><span>Avg. performance score</span><span class="stat-icon blue"><i data-lucide="bar-chart-3"></i></span></div>
+      <strong class="stat-value">{{ average_score|floatformat:1 }}</strong>
+      <div class="stat-detail">Latest available evaluations</div>
+    </article>
+    <article class="stat-card">
+      <div class="stat-head"><span>At-risk employees</span><span class="stat-icon orange"><i data-lucide="circle-alert"></i></span></div>
+      <strong class="stat-value">{{ at_risk_count }}</strong>
+      <div class="stat-detail">Needs attention this cycle</div>
+    </article>
+    <article class="stat-card">
+      <div class="stat-head"><span>Recent evaluations</span><span class="stat-icon purple"><i data-lucide="clipboard-check"></i></span></div>
+      <strong class="stat-value">{{ evaluation_count }}</strong>
+      <div class="stat-detail">Recorded evaluations</div>
+    </article>
     </section>
 
-    <section class="mt-6 grid gap-6 xl:grid-cols-[1.4fr_.8fr]">
-      <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-        <p class="text-xs font-semibold uppercase tracking-wider text-lexie-teal">Workspace activity</p>
-        <h3 class="mt-1 text-lg font-semibold text-lexie-ink">Performance trend</h3>
-        <div class="mt-4 h-72"><canvas id="performance-trend" aria-label="Average monthly performance trend" role="img"></canvas></div>
-      </div>
-      <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-        <p class="text-xs font-semibold uppercase tracking-wider text-lexie-teal">Department performance</p>
-        <h3 class="mt-1 text-lg font-semibold text-lexie-ink">Average score by department</h3>
-        <div class="mt-4 h-72"><canvas id="department-scores" aria-label="Average performance score by department" role="img"></canvas></div>
-      </div>
+    <section class="dashboard-grid">
+    <div class="panel">
+      <div class="section-header"><h3>Performance trend</h3><span class="subtle-label">Monthly average</span></div>
+      <div class="mt-4 h-72"><canvas id="performance-trend" aria-label="Average monthly performance trend" role="img"></canvas></div>
+    </div>
+    <div class="panel">
+      <div class="section-header"><h3>Department comparison</h3><span class="subtle-label">Latest average</span></div>
+      <div class="mt-4 h-72"><canvas id="department-scores" aria-label="Average performance score by department" role="img"></canvas></div>
+    </div>
     </section>
-    <section class="mt-6 grid gap-6 xl:grid-cols-2">
-      <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 class="font-semibold text-lexie-ink">Top performers</h3>
-        <div class="mt-3 divide-y divide-slate-100">{% for employee in top_performers %}<a href="{% url 'employee-profile' employee.pk %}" class="flex items-center justify-between gap-3 py-3 hover:text-lexie-teal"><span><span class="block text-sm font-medium">{{ employee.name }}</span><span class="mt-1 block text-xs text-slate-500">{{ employee.department.name }}</span></span><span class="font-semibold text-lexie-teal">{{ employee.dashboard_score|floatformat:1 }}</span></a>{% empty %}<p class="py-5 text-sm text-slate-500">No evaluation scores available yet.</p>{% endfor %}</div>
+    <section class="dashboard-grid">
+    <div class="panel table-panel">
+      <div class="section-header"><h3>Recent scores</h3><a class="text-button" href="{% url 'performance-list' %}">View performance <i data-lucide="arrow-up-right"></i></a></div>
+      <div class="table-scroll"><table><thead><tr><th>Employee</th><th>Department</th><th>Score</th><th>Date</th></tr></thead><tbody>
+        {% for evaluation in recent_evaluations %}<tr><td><a href="{% url 'employee-profile' evaluation.employee.pk %}">{{ evaluation.employee.name }}</a></td><td>{{ evaluation.employee.department.name }}</td><td><strong>{{ evaluation.overall_score|floatformat:1 }}</strong><span class="score-max">/100</span></td><td>{{ evaluation.date|date:"M j, Y" }}</td></tr>{% empty %}<tr><td colspan="4">No recent evaluations.</td></tr>{% endfor %}
+      </tbody></table></div>
+    </div>
+    <div class="panel">
+      <div class="section-header"><h3>Top performers</h3><span class="subtle-label">At-risk watchlist</span></div>
+      <div class="dashboard-lists">
+        <div class="dashboard-list">{% for employee in top_performers %}<a href="{% url 'employee-profile' employee.pk %}" class="dashboard-person"><span><strong>{{ employee.name }}</strong><small>{{ employee.department.name }}</small></span><span class="person-score">{{ employee.dashboard_score|floatformat:1 }}</span></a>{% empty %}<p class="empty-copy">No evaluation scores available yet.</p>{% endfor %}</div>
+        <div class="risk-list"><h4>At-risk employees</h4>{% for employee in at_risk_employees %}<a href="{% url 'employee-profile' employee.pk %}" class="dashboard-person"><span><strong>{{ employee.name }}</strong><small>{{ employee.department.name }}</small></span><span class="risk-score">{{ employee.dashboard_score|floatformat:1 }}</span></a>{% empty %}<p class="empty-copy">No active employees are currently below the risk threshold.</p>{% endfor %}</div>
       </div>
-      <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 class="font-semibold text-lexie-ink">At-risk employees</h3>
-        <div class="mt-3 divide-y divide-slate-100">{% for employee in at_risk_employees %}<a href="{% url 'employee-profile' employee.pk %}" class="flex items-center justify-between gap-3 py-3 hover:text-rose-700"><span><span class="block text-sm font-medium">{{ employee.name }}</span><span class="mt-1 block text-xs text-slate-500">{{ employee.department.name }}</span></span><span class="font-semibold text-rose-700">{{ employee.dashboard_score|floatformat:1 }}</span></a>{% empty %}<p class="py-5 text-sm text-slate-500">No active employees are currently below the risk threshold.</p>{% endfor %}</div>
-      </div>
+    </div>
     </section>
     {{ trend_labels|json_script:"trend-labels" }}
     {{ trend_values|json_script:"trend-values" }}

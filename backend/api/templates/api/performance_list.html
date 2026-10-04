@@ -3,8 +3,8 @@
 {% block page_heading %}Performance{% endblock %}
 {% block content %}
   <section class="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-    <div><p class="text-xs font-semibold uppercase tracking-[.16em] text-lexie-teal">Workspace</p><h2 class="mt-2 text-2xl font-semibold text-lexie-ink">Performance records</h2><p class="mt-1 text-sm text-slate-500">Scores are stored in the existing evaluation records, preserving your database schema.</p></div>
-    {% if can_manage %}<a href="{% url 'performance-create' %}" class="rounded-lg bg-lexie-teal px-4 py-2.5 text-sm font-semibold text-white">＋ Add record</a>{% endif %}
+    <div><p class="eyebrow">WORKSPACE</p><h2 class="mt-2 text-2xl font-semibold text-lexie-ink">Performance records</h2><p class="mt-1 text-sm text-slate-500">Scores are stored in the existing evaluation records, preserving your database schema.</p></div>
+    {% if can_manage %}<a href="{% url 'performance-create' %}" class="rounded-lg bg-lexie-teal px-4 py-2.5 text-sm font-semibold text-white"><i data-lucide="plus"></i> Add record</a>{% endif %}
   </section>
   <section class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
     <form method="get" class="grid gap-3 border-b border-slate-100 p-4 sm:grid-cols-2 lg:grid-cols-5">
@@ -12,7 +12,7 @@
       <label class="text-xs font-medium text-slate-500">Department<select name="department" class="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"><option value="">All departments</option>{% for department in departments %}<option value="{{ department.pk }}" {% if department.pk|stringformat:"s" == selected_department %}selected{% endif %}>{{ department.name }}</option>{% endfor %}</select></label>
       <label class="text-xs font-medium text-slate-500">From<input type="date" name="start_date" value="{{ start_date }}" class="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"></label>
       <label class="text-xs font-medium text-slate-500">To<input type="date" name="end_date" value="{{ end_date }}" class="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"></label>
-      <div class="flex items-end"><button class="rounded-lg bg-lexie-navy px-4 py-2 text-sm text-white">Filter</button></div>
+      <div class="flex items-end"><button class="rounded-lg bg-lexie-navy px-4 py-2 text-sm text-white"><i data-lucide="sliders-horizontal"></i> Filter</button></div>
     </form>
     <div class="overflow-x-auto"><table class="min-w-full divide-y divide-slate-100 text-left text-sm">
       <thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500"><tr><th class="px-5 py-3">Date</th><th class="px-5 py-3">Employee</th><th class="px-5 py-3">Department</th><th class="px-5 py-3">Overall score</th><th class="px-5 py-3">Evaluator</th></tr></thead>
