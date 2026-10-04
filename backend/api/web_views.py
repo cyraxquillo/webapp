@@ -22,6 +22,7 @@ from .forms import (
     DepartmentForm,
     EmployeeForm,
     EvaluationForm,
+    NotificationPreferencesForm,
     ProfileForm,
 )
 from .models import Department, Employee, Evaluation, Prediction, User
@@ -1024,23 +1025,42 @@ def account_create(request):
 
 @roles_required(*VIEWER_ROLES)
 def settings_view(request):
-    profile_form = ProfileForm(request.POST if request.POST.get("form_action") == "profile" else None, instance=request.user)
+    form_action = request.POST.get("form_action")
+    tab = request.GET.get("tab", "profile")
+    profile_form = ProfileForm(
+        request.POST if form_action == "profile" else None,
+        instance=request.user,
+    )
     password_form = CurrentPasswordChangeForm(
         request.user,
-        request.POST if request.POST.get("form_action") == "password" else None,
+        request.POST if form_action == "password" else None,
+    )
+    preference_form = NotificationPreferencesForm(
+        request.POST if form_action == "notifications" else None,
+        preferences=request.user.notification_preferences,
     )
     if request.method == "POST":
-        if request.POST.get("form_action") == "profile" and profile_form.is_valid():
+        if form_action == "profile" and profile_form.is_valid():
             profile_form.save()
             messages.success(request, "Profile updated.")
             return redirect("settings")
-        if request.POST.get("form_action") == "password" and password_form.is_valid():
+        if form_action == "password" and password_form.is_valid():
             user = password_form.save()
             update_session_auth_hash(request, user)
             messages.success(request, "Password changed.")
             return redirect("settings")
+        if form_action == "notifications" and preference_form.is_valid():
+            request.user.notification_preferences = preference_form.cleaned_data
+            request.user.save(update_fields=("notification_preferences",))
+            messages.success(request, "Notification preference saved.")
+            return redirect("/settings/?tab=notifications")
     return render(
         request,
         "api/settings.html",
-        {"profile_form": profile_form, "password_form": password_form},
+        {
+            "profile_form": profile_form,
+            "password_form": password_form,
+            "preference_form": preference_form,
+            "active_tab": tab if tab in {"profile", "notifications", "security"} else "profile",
+        },
     )

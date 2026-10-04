@@ -2,19 +2,101 @@
 {% block title %}Settings · Lexie Performance Hub{% endblock %}
 {% block page_heading %}Settings{% endblock %}
 {% block content %}
-  <section class="mb-6"><p class="text-xs font-semibold uppercase tracking-[.16em] text-lexie-teal">Your account</p><h2 class="mt-2 text-2xl font-semibold text-lexie-ink">Settings</h2><p class="mt-1 text-sm text-slate-500">Update your profile information and password.</p></section>
-  <div class="grid items-start gap-6 xl:grid-cols-2">
-    <form method="post" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
-      {% csrf_token %}<input type="hidden" name="form_action" value="profile">
-      <h3 class="text-lg font-semibold text-lexie-ink">Profile</h3><p class="mb-5 mt-1 text-sm text-slate-500">Manage the name and email associated with your account.</p>
-      {% for field in profile_form %}<div class="mb-4"><label for="{{ field.id_for_label }}" class="block text-sm font-medium text-slate-700">{{ field.label }}</label>{{ field }}{% for error in field.errors %}<p class="mt-1 text-xs text-rose-700">{{ error }}</p>{% endfor %}</div>{% endfor %}
-      <button class="mt-2 rounded-lg bg-lexie-teal px-4 py-2.5 text-sm font-semibold text-white"><i data-lucide="save"></i> Save profile</button>
-    </form>
-    <form method="post" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
-      {% csrf_token %}<input type="hidden" name="form_action" value="password">
-      <h3 class="text-lg font-semibold text-lexie-ink">Change password</h3><p class="mb-5 mt-1 text-sm text-slate-500">Your other signed-in sessions may be logged out.</p>
-      {% for field in password_form %}<div class="mb-4"><label for="{{ field.id_for_label }}" class="block text-sm font-medium text-slate-700">{{ field.label }}</label>{{ field }}{% if field.help_text %}<p class="mt-1 text-xs text-slate-500">{{ field.help_text|safe }}</p>{% endif %}{% for error in field.errors %}<p class="mt-1 text-xs text-rose-700">{{ error }}</p>{% endfor %}</div>{% endfor %}
-      <button class="mt-2 rounded-lg bg-lexie-teal px-4 py-2.5 text-sm font-semibold text-white"><i data-lucide="key-round"></i> Change password</button>
-    </form>
+  <section class="settings-heading">
+    <p class="eyebrow">WORKSPACE PREFERENCES</p>
+    <h2>Settings</h2>
+    <p class="muted">Manage your profile, notifications, and account security.</p>
+  </section>
+  <div class="settings-layout">
+    <div class="settings-nav" role="tablist" aria-label="Settings">
+      <button type="button" role="tab" id="tab-profile" aria-controls="panel-profile" aria-selected="{% if active_tab == 'profile' %}true{% else %}false{% endif %}" class="{% if active_tab == 'profile' %}active{% endif %}" data-settings-tab="profile"><i data-lucide="user-round"></i> Profile</button>
+      <button type="button" role="tab" id="tab-notifications" aria-controls="panel-notifications" aria-selected="{% if active_tab == 'notifications' %}true{% else %}false{% endif %}" class="{% if active_tab == 'notifications' %}active{% endif %}" data-settings-tab="notifications"><i data-lucide="bell"></i> Notifications</button>
+      <button type="button" role="tab" id="tab-security" aria-controls="panel-security" aria-selected="{% if active_tab == 'security' %}true{% else %}false{% endif %}" class="{% if active_tab == 'security' %}active{% endif %}" data-settings-tab="security"><i data-lucide="shield-check"></i> Security</button>
+    </div>
+    <div class="settings-tab-content">
+      <section class="panel settings-form" role="tabpanel" id="panel-profile" aria-labelledby="tab-profile" {% if active_tab != "profile" %}hidden{% endif %}>
+        <div class="section-header">
+          <h3>Profile information</h3>
+          <span class="subtle-label">
+            {% if request.user.role == "admin" %}Admin / IT Manager{% elif request.user.role == "staff" or request.user.role == "employee" %}Staff / Employee{% elif request.user.role == "client" %}Client portal{% else %}{{ request.user.get_role_display }}{% endif %}
+          </span>
+        </div>
+        <form method="post" action="{% url 'settings' %}?tab=profile" class="settings-profile-form">
+          {% csrf_token %}
+          <input type="hidden" name="form_action" value="profile">
+          <div class="form-avatar"><span class="avatar avatar-xl">{{ request.user.name|slice:":1"|upper }}</span></div>
+          <div class="form-grid">
+            {% for field in profile_form %}
+              <label for="{{ field.id_for_label }}">{{ field.label }}{{ field }}{% for error in field.errors %}<small class="settings-error" role="alert">{{ error }}</small>{% endfor %}</label>
+            {% endfor %}
+            <label>Role<input type="text" value="{% if request.user.role == 'admin' %}Admin / IT Manager{% elif request.user.role == 'staff' or request.user.role == 'employee' %}Staff / Employee{% elif request.user.role == 'client' %}Client portal{% else %}{{ request.user.get_role_display }}{% endif %}" readonly></label>
+          </div>
+          <button type="submit" class="primary-button"><i data-lucide="save"></i> Save changes</button>
+        </form>
+      </section>
+
+      <section class="panel settings-form" role="tabpanel" id="panel-notifications" aria-labelledby="tab-notifications" {% if active_tab != "notifications" %}hidden{% endif %}>
+        <div class="section-header">
+          <h3>Notification preferences</h3>
+          <span class="subtle-label">Saved to your account</span>
+        </div>
+        <form method="post" action="{% url 'settings' %}?tab=notifications" class="preference-list">
+          {% csrf_token %}
+          <input type="hidden" name="form_action" value="notifications">
+          <label class="preference-row">
+            <span><strong>Evaluation updates</strong><small>Email me when an evaluation is published.</small></span>
+            <input type="checkbox" name="email_evaluations" role="switch" aria-label="Evaluation updates" {% if preference_form.email_evaluations.value %}checked{% endif %} onchange="this.form.requestSubmit()">
+          </label>
+          <label class="preference-row">
+            <span><strong>Prediction updates</strong><small>Email me when a new performance prediction is available.</small></span>
+            <input type="checkbox" name="email_predictions" role="switch" aria-label="Prediction updates" {% if preference_form.email_predictions.value %}checked{% endif %} onchange="this.form.requestSubmit()">
+          </label>
+          <label class="preference-row">
+            <span><strong>Weekly summary</strong><small>Receive a weekly summary of performance activity.</small></span>
+            <input type="checkbox" name="weekly_summary" role="switch" aria-label="Weekly summary" {% if preference_form.weekly_summary.value %}checked{% endif %} onchange="this.form.requestSubmit()">
+          </label>
+        </form>
+      </section>
+
+      <section class="panel settings-form" role="tabpanel" id="panel-security" aria-labelledby="tab-security" {% if active_tab != "security" %}hidden{% endif %}>
+        <div class="section-header">
+          <h3>Change password</h3>
+          <span class="subtle-label">Password update</span>
+        </div>
+        <form method="post" action="{% url 'settings' %}?tab=security" class="security-form">
+          {% csrf_token %}
+          <input type="hidden" name="form_action" value="password">
+          {% for field in password_form %}
+            <label for="{{ field.id_for_label }}">
+              {% if field.name == "old_password" %}Current password{% elif field.name == "new_password1" %}New password{% else %}Confirm new password{% endif %}
+              {{ field }}
+              {% if field.help_text %}<span class="password-help">{{ field.help_text|safe }}</span>{% endif %}
+              {% for error in field.errors %}<small class="settings-error" role="alert">{{ error }}</small>{% endfor %}
+            </label>
+          {% endfor %}
+          <p class="muted">Use at least 8 characters.</p>
+          <button type="submit" class="primary-button"><i data-lucide="key-round"></i> Update password</button>
+        </form>
+      </section>
+    </div>
   </div>
+{% endblock %}
+{% block page_scripts %}
+  <script>
+    (() => {
+      const tabs = Array.from(document.querySelectorAll("[data-settings-tab]"));
+      const panels = Array.from(document.querySelectorAll("[role='tabpanel']"));
+      tabs.forEach((tab) => tab.addEventListener("click", () => {
+        const selected = tab.dataset.settingsTab;
+        tabs.forEach((item) => {
+          const active = item === tab;
+          item.classList.toggle("active", active);
+          item.setAttribute("aria-selected", String(active));
+        });
+        panels.forEach((panel) => {
+          panel.hidden = panel.id !== `panel-${selected}`;
+        });
+      }));
+    })();
+  </script>
 {% endblock %}

@@ -558,6 +558,43 @@ class WebViewTests(TestCase):
         self.assertEqual(self.employee_user.name, "Updated Web Employee")
         self.assertEqual(self.client.get("/settings/").status_code, 200)
 
+    def test_notification_preferences_load_defaults_save_and_are_user_specific(self):
+        self.client.force_login(self.employee_user)
+
+        response = self.client.get("/settings/?tab=notifications")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="panel-notifications"')
+        self.assertContains(response, 'name="email_evaluations" role="switch" aria-label="Evaluation updates" checked')
+        self.assertContains(response, 'name="email_predictions" role="switch" aria-label="Prediction updates" checked')
+        self.assertNotContains(response, 'name="weekly_summary" role="switch" aria-label="Weekly summary" checked')
+
+        response = self.client.post(
+            "/settings/?tab=notifications",
+            {
+                "form_action": "notifications",
+                "email_predictions": "on",
+                "weekly_summary": "on",
+            },
+        )
+
+        self.assertRedirects(response, "/settings/?tab=notifications")
+        self.employee_user.refresh_from_db()
+        self.other_user.refresh_from_db()
+        self.assertEqual(
+            self.employee_user.notification_preferences,
+            {
+                "email_evaluations": False,
+                "email_predictions": True,
+                "weekly_summary": True,
+            },
+        )
+        self.assertEqual(self.other_user.notification_preferences, {})
+
+        response = self.client.get("/settings/?tab=notifications")
+        self.assertNotContains(response, 'name="email_evaluations" role="switch" aria-label="Evaluation updates" checked')
+        self.assertContains(response, 'name="weekly_summary" role="switch" aria-label="Weekly summary" checked')
+
     def test_staff_role_is_treated_as_employee_for_private_pages(self):
         self.client.force_login(self.other_user)
         response = self.client.get("/performance/")

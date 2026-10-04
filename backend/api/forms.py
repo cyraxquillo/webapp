@@ -232,6 +232,29 @@ class ProfileForm(StyledModelForm):
         return email
 
 
+class NotificationPreferencesForm(forms.Form):
+    email_evaluations = forms.BooleanField(required=False)
+    email_predictions = forms.BooleanField(required=False)
+    weekly_summary = forms.BooleanField(required=False)
+
+    def __init__(self, *args, preferences=None, **kwargs):
+        initial_preferences = {
+            "email_evaluations": True,
+            "email_predictions": True,
+            "weekly_summary": False,
+        }
+        if isinstance(preferences, dict):
+            initial_preferences.update(
+                {
+                    key: preferences[key]
+                    for key in initial_preferences
+                    if isinstance(preferences.get(key), bool)
+                }
+            )
+        kwargs.setdefault("initial", initial_preferences)
+        super().__init__(*args, **kwargs)
+
+
 class CurrentPasswordChangeForm(PasswordChangeForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
