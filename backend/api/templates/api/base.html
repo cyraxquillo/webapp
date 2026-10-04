@@ -39,7 +39,7 @@
 <body class="min-h-screen bg-lexie-canvas text-lexie-ink antialiased">
   {% if request.user.is_authenticated %}
     <div id="sidebar-backdrop" data-open="false" class="fixed inset-0 z-30 bg-lexie-navy/50 md:hidden" aria-hidden="true"></div>
-    <aside id="sidebar" data-open="false" class="fixed inset-y-0 left-0 z-40 flex w-64 -translate-x-full flex-col bg-lexie-navy px-4 py-6 text-slate-200 transition-transform duration-200 md:translate-x-0">
+    <aside id="sidebar" data-open="false" class="fixed inset-y-0 left-0 z-40 flex w-64 -translate-x-full flex-col overflow-y-auto bg-lexie-navy px-4 py-6 text-slate-200 transition-transform duration-200 md:translate-x-0">
       <a href="{% url 'dashboard' %}" class="flex items-center gap-3 px-2 text-xl font-bold tracking-tight text-white" aria-label="Lexie Performance Hub home">
         <span class="grid h-9 w-9 place-items-center rounded-xl bg-lexie-teal text-lg">✦</span>
         <span>lexie<span class="text-emerald-300">.</span></span>
