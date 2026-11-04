@@ -1,0 +1,46 @@
+{% extends "api/base.html" %}
+{% block title %}Device management{% endblock %}
+{% block page_heading %}Device management{% endblock %}
+{% block content %}
+  <section class="mb-6">
+    <p class="eyebrow">SECURITY</p>
+    <h2 class="mt-2 text-2xl font-semibold text-lexie-ink">Trusted devices</h2>
+    <p class="mt-1 text-sm text-slate-500">Review sign-in requests and remove devices that should no longer have access.</p>
+  </section>
+  <section class="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <table class="min-w-full divide-y divide-slate-100 text-left text-sm">
+      <thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
+        <tr><th class="px-5 py-3">Device</th><th class="px-5 py-3">Owner</th><th class="px-5 py-3">IP address</th><th class="px-5 py-3">Last used</th><th class="px-5 py-3">Status</th><th class="px-5 py-3">Actions</th></tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        {% for device in devices %}
+          <tr>
+            <td class="px-5 py-3">
+              <span class="font-medium text-lexie-ink">{{ device.label }}{% if device.is_current_device %} · This device{% endif %}</span>
+              <span class="block text-xs text-slate-500">Added {{ device.created_at|date:"M j, Y H:i" }}</span>
+            </td>
+            <td class="px-5 py-3">{{ device.user.name }}<span class="block text-xs text-slate-500">{{ device.user.email }} · {{ device.user.get_role_display }}</span></td>
+            <td class="px-5 py-3">{% if device.ip_address %}{{ device.ip_address }}{% else %}—{% endif %}</td>
+            <td class="px-5 py-3">{% if device.last_used_at %}{{ device.last_used_at|date:"M j, Y H:i" }}{% else %}Never{% endif %}</td>
+            <td class="px-5 py-3">{{ device.get_status_display }}</td>
+            <td class="px-5 py-3">
+              <div class="flex flex-wrap gap-2">
+                {% if device.can_manage and device.can_approve %}
+                  <form method="post" action="{% url 'trusted-device-action' device.pk %}">{% csrf_token %}<input type="hidden" name="action" value="approve"><button type="submit" class="rounded-lg bg-lexie-teal px-3 py-2 text-xs font-semibold text-white">Approve</button></form>
+                {% endif %}
+                {% if device.can_manage and device.can_reject %}
+                  <form method="post" action="{% url 'trusted-device-action' device.pk %}">{% csrf_token %}<input type="hidden" name="action" value="reject"><button type="submit" class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold">Reject</button></form>
+                {% endif %}
+                {% if device.can_manage and device.can_remove %}
+                  <form method="post" action="{% url 'trusted-device-action' device.pk %}">{% csrf_token %}<input type="hidden" name="action" value="remove"><button type="submit" class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold">Remove</button></form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="px-5 py-12 text-center text-sm text-slate-500">No trusted devices found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+{% endblock %}

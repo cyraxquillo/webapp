@@ -1,7 +1,15 @@
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 
-from .models import Client, Department, Employee, Evaluation, Prediction, User
+from .models import (
+    Client,
+    Department,
+    Employee,
+    Evaluation,
+    OfficeLocation,
+    Prediction,
+    User,
+)
 
 DEFAULT_NOTIFICATION_PREFERENCES = {
     "email_evaluations": True,
@@ -41,7 +49,16 @@ class UserCreateSerializer(serializers.Serializer):
     name = serializers.CharField(min_length=1, max_length=160)
     email = serializers.EmailField()
     password = serializers.CharField(min_length=8, max_length=128, write_only=True)
-    role = serializers.ChoiceField(choices=(User.Role.staff, User.Role.employee, User.Role.client))
+    role = serializers.ChoiceField(
+        choices=(
+            User.Role.admin,
+            User.Role.management,
+            User.Role.team_leader,
+            User.Role.staff,
+            User.Role.employee,
+            User.Role.client,
+        )
+    )
     company_name = serializers.CharField(max_length=180, required=False, allow_null=True, allow_blank=True)
     services_used = serializers.CharField(required=False, allow_null=True, allow_blank=True)
 
@@ -72,6 +89,31 @@ class NotificationPreferencesSerializer(serializers.Serializer):
     weekly_summary = serializers.BooleanField(default=False)
 
 
+class OfficeLocationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OfficeLocation
+        fields = (
+            "id",
+            "name",
+            "latitude",
+            "longitude",
+            "allowed_radius_meters",
+            "outside_time_in_policy",
+            "is_active",
+        )
+        read_only_fields = ("id",)
+
+    def validate_latitude(self, value):
+        if not -90 <= value <= 90:
+            raise serializers.ValidationError("Latitude must be between -90 and 90.")
+        return value
+
+    def validate_longitude(self, value):
+        if not -180 <= value <= 180:
+            raise serializers.ValidationError("Longitude must be between -180 and 180.")
+        return value
+
+
 class PasswordUpdateSerializer(serializers.Serializer):
     current_password = serializers.CharField(min_length=1, max_length=128, write_only=True)
     new_password = serializers.CharField(min_length=8, max_length=128, write_only=True)
@@ -90,11 +132,12 @@ class DepartmentSerializer(serializers.ModelSerializer):
 class EmployeeSerializer(serializers.ModelSerializer):
     department = serializers.CharField(max_length=100)
     user_id = serializers.IntegerField(required=False, allow_null=True)
+    team_leader_id = serializers.IntegerField(required=False, allow_null=True)
 
     class Meta:
         model = Employee
         fields = (
-            "id", "employee_code", "user_id", "name", "department", "position",
+            "id", "employee_code", "user_id", "team_leader_id", "name", "department", "position",
             "date_hired", "status", "attendance_rate", "tenure_months", "training_hours",
         )
         read_only_fields = ("id",)
@@ -126,6 +169,11 @@ class EmployeeSerializer(serializers.ModelSerializer):
             user = User.objects.filter(pk=user_id).first()
             if user is None or user.role not in {User.Role.staff, User.Role.employee}:
                 raise serializers.ValidationError({"user_id": "user_id must reference an existing staff or employee account"})
+        leader_id = attrs.get("team_leader_id", getattr(self.instance, "team_leader_id", None))
+        if leader_id is not None:
+            leader = User.objects.filter(pk=leader_id, role=User.Role.team_leader).first()
+            if leader is None:
+                raise serializers.ValidationError({"team_leader_id": "team_leader_id must reference a Team Leader account"})
         if not self.partial or "department" in attrs:
             department_name = attrs.get("department")
             if department_name:
@@ -135,18 +183,22 @@ class EmployeeSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         user_id = validated_data.pop("user_id", None)
+        team_leader_id = validated_data.pop("team_leader_id", None)
         if not validated_data.get("employee_code"):
             validated_data["employee_code"] = "pending"
-            employee = Employee.objects.create(**validated_data, user_id=user_id)
+            employee = Employee.objects.create(**validated_data, user_id=user_id, team_leader_id=team_leader_id)
             employee.employee_code = f"EMP-{1000 + employee.pk}"
             employee.save(update_fields=("employee_code",))
             return employee
         validated_data["user_id"] = user_id
+        validated_data["team_leader_id"] = team_leader_id
         return Employee.objects.create(**validated_data)
 
     def update(self, instance, validated_data):
         if "user_id" in validated_data:
             instance.user_id = validated_data.pop("user_id")
+        if "team_leader_id" in validated_data:
+            instance.team_leader_id = validated_data.pop("team_leader_id")
         return super().update(instance, validated_data)
 
 

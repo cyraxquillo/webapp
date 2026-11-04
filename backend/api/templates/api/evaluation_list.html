@@ -1,12 +1,12 @@
 {% extends "api/base.html" %}
-{% block title %}Evaluations · Lexie Performance Hub{% endblock %}
-{% block page_heading %}Evaluations{% endblock %}
+{% block title %}Evaluations{% endblock %}
+{% block page_heading %}Review scores{% endblock %}
 {% block content %}
   <section class="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-    <div><p class="eyebrow">PERFORMANCE REVIEWS</p><h2 class="mt-2 text-2xl font-semibold text-lexie-ink">Evaluations</h2><p class="mt-1 text-sm text-slate-500">Review evaluation scores and their calculated overall results.</p></div>
+    <div><p class="eyebrow">PERFORMANCE REVIEWS</p><p class="mt-1 text-sm text-slate-500">Review scores and their calculated overall results.</p></div>
     <div class="flex flex-wrap gap-2">
-      {% if can_manage_criteria %}<a href="{% url 'criteria-manage' %}" class="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600"><i data-lucide="settings"></i> Manage criteria</a>{% endif %}
-      {% if can_manage %}<a href="{% url 'evaluation-create' %}" class="rounded-lg bg-lexie-teal px-4 py-2.5 text-sm font-semibold text-white"><i data-lucide="plus"></i> Create evaluation</a>{% endif %}
+      {% if can_manage_criteria %}<a href="{% url 'criteria-manage' %}" class="whitespace-nowrap rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600"><i data-lucide="settings"></i> Manage criteria</a>{% endif %}
+      {% if can_manage %}<a href="{% url 'evaluation-create' %}" class="whitespace-nowrap rounded-lg bg-lexie-teal px-4 py-2.5 text-sm font-semibold text-white"><i data-lucide="plus"></i> Create evaluation</a>{% endif %}
     </div>
   </section>
   <section class="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -15,17 +15,17 @@
     {% if not criteria %}<p class="mt-2 text-xs text-slate-500">Criteria configuration is unavailable.</p>{% endif %}
   </section>
   <section class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-    <form method="get" class="grid gap-3 border-b border-slate-100 p-4 sm:grid-cols-2 lg:grid-cols-4">
+    <form method="get" data-auto-filter class="grid gap-3 border-b border-slate-100 p-4 sm:grid-cols-2 lg:grid-cols-4">
       {% if can_manage %}<label class="text-xs font-medium text-slate-500">Employee<select name="employee" class="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"><option value="">All employees</option>{% for employee in employees %}<option value="{{ employee.pk }}" {% if employee.pk|stringformat:"s" == selected_employee %}selected{% endif %}>{{ employee.name }}</option>{% endfor %}</select></label>{% endif %}
       <label class="text-xs font-medium text-slate-500">From<input type="date" name="start_date" value="{{ start_date }}" class="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"></label>
       <label class="text-xs font-medium text-slate-500">To<input type="date" name="end_date" value="{{ end_date }}" class="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"></label>
-      <div class="flex items-end"><button class="rounded-lg bg-lexie-navy px-4 py-2 text-sm text-white"><i data-lucide="sliders-horizontal"></i> Filter</button></div>
+      <div class="filter-action-group self-end"><a href="{% url 'evaluation-list' %}" class="filter-action-link rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600">Clear</a></div>
     </form>
     <div class="overflow-x-auto"><table class="min-w-full divide-y divide-slate-100 text-left text-sm">
-      <thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500"><tr><th class="px-5 py-3">Date</th><th class="px-5 py-3">Employee</th><th class="px-5 py-3">Overall score</th><th class="px-5 py-3">Evaluator</th><th class="px-5 py-3">Details</th></tr></thead>
+      <thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500"><tr><th class="px-5 py-3">Date</th><th class="px-5 py-3">Employee</th><th class="px-5 py-3">Status</th><th class="px-5 py-3">Overall score</th><th class="px-5 py-3">Classification</th><th class="px-5 py-3">Evaluator</th><th class="px-5 py-3">Details</th></tr></thead>
       <tbody class="divide-y divide-slate-100">
-        {% for evaluation in evaluations %}<tr class="hover:bg-slate-50"><td class="whitespace-nowrap px-5 py-3 text-slate-600">{{ evaluation.date|date:"M j, Y" }}</td><td class="px-5 py-3 font-medium text-lexie-ink">{{ evaluation.employee.name }}</td><td class="px-5 py-3 font-semibold text-lexie-teal">{{ evaluation.overall_score|floatformat:1 }}</td><td class="px-5 py-3 text-slate-600">{{ evaluation.evaluator.name }}</td><td class="px-5 py-3"><a href="{% url 'evaluation-detail' evaluation.pk %}" class="text-xs font-medium text-lexie-teal hover:underline">View scores</a></td></tr>
-        {% empty %}<tr><td colspan="5" class="px-5 py-12 text-center text-sm text-slate-500">No evaluations match those filters.</td></tr>{% endfor %}
+        {% for evaluation in evaluations %}<tr class="hover:bg-slate-50"><td class="whitespace-nowrap px-5 py-3 text-slate-600">{{ evaluation.date|date:"M j, Y" }}</td><td class="px-5 py-3 font-medium text-lexie-ink">{{ evaluation.employee.name }}</td><td class="px-5 py-3"><span class="status-badge {% if evaluation.status == 'completed' %}success{% else %}warning{% endif %}">{{ evaluation.get_status_display }}</span></td><td class="px-5 py-3 font-semibold text-lexie-teal">{% if evaluation.overall_score != None %}{{ evaluation.overall_score|floatformat:1 }}{% else %}—{% endif %}</td><td class="px-5 py-3">{% if evaluation.employee.latest_prediction %}<span class="classification-badge {% if evaluation.employee.latest_prediction.predicted_category|lower == 'low' %}classification-badge--low{% elif evaluation.employee.latest_prediction.predicted_category|lower == 'average' %}classification-badge--average{% else %}classification-badge--high{% endif %}">{{ evaluation.employee.latest_prediction.predicted_category }}</span><small class="block text-slate-500">{% widthratio evaluation.employee.latest_prediction.confidence_score 1 100 %}% confidence</small>{% else %}—{% endif %}</td><td class="px-5 py-3 text-slate-600">{{ evaluation.evaluator.name }}</td><td class="px-5 py-3"><a href="{% url 'evaluation-detail' evaluation.pk %}" class="text-xs font-medium text-lexie-teal hover:underline">View scores</a></td></tr>
+        {% empty %}<tr><td colspan="7" class="px-5 py-12 text-center text-sm text-slate-500">No evaluations match those filters.</td></tr>{% endfor %}
       </tbody>
     </table></div>
   </section>

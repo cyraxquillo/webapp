@@ -17,7 +17,11 @@ class IsAdmin(HasRole):
 
 
 class IsAdminOrManager(HasRole):
-    allowed_roles = ("admin", "hr_manager")
+    allowed_roles = ("admin", "management", "hr_manager")
+
+
+class IsManagementOrTeamLeader(HasRole):
+    allowed_roles = ("admin", "management", "hr_manager", "team_leader")
 
 
 class IsAdminManagerOrEmployee(HasRole):

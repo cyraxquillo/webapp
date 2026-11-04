@@ -1,0 +1,26 @@
+{% extends "api/base.html" %}
+{% block title %}Edit profile{% endblock %}
+{% block page_heading %}Record details{% endblock %}
+{% block content %}
+  <section class="mx-auto max-w-4xl">
+    <div class="mb-6"><p class="eyebrow">EMPLOYEE PROFILE</p><h2 class="mt-2 text-2xl font-semibold text-lexie-ink">Work details</h2><p class="mt-1 text-sm text-slate-500">Edit the employee record. Derived information is read-only.</p></div>
+    <form method="post" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+      {% csrf_token %}
+      {% if form.non_field_errors %}<div class="mb-5 rounded-lg bg-rose-50 p-3 text-sm text-rose-800">{{ form.non_field_errors }}</div>{% endif %}
+      <div class="grid gap-5 sm:grid-cols-2">
+        {% for field in form %}<div class="flex min-w-0 flex-col gap-1.5"><label for="{{ field.id_for_label }}" class="whitespace-nowrap text-sm font-medium text-slate-700">{{ field.label }}</label>{{ field }}{% for error in field.errors %}<p class="text-xs text-rose-700">{{ error }}</p>{% endfor %}</div>{% endfor %}
+      </div>
+      <section class="mt-7 rounded-xl border border-slate-200 bg-slate-50 p-5">
+        <h3 class="font-semibold text-lexie-ink">Read-only profile information</h3>
+        <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div><p class="text-xs text-slate-500">Employee ID</p><p class="mt-1 font-medium">{{ employee.employee_code }}</p></div>
+          <div><p class="text-xs text-slate-500">Attendance rate</p><p class="mt-1 font-medium">{% if employee.attendance_rate is not None %}{{ employee.attendance_rate|floatformat:1 }}%{% else %}Not recorded yet{% endif %}</p></div>
+          <div><p class="text-xs text-slate-500">Training hours</p><p class="mt-1 font-medium">{% if employee.training_hours is not None %}{{ employee.training_hours|floatformat:1 }}{% else %}Not recorded yet{% endif %}</p></div>
+          <div><p class="text-xs text-slate-500">Tenure</p><p class="mt-1 font-medium">{{ employee.tenure_months }} months</p></div>
+        </div>
+        <p class="mt-4 text-xs text-slate-500">Status: <strong>{{ employee.get_status_display }}</strong>. Use the profile status action to change it.</p>
+      </section>
+      <div class="mt-7 flex justify-end gap-3 border-t border-slate-100 pt-5"><a href="{% url cancel_url pk=cancel_pk %}" class="rounded-lg border border-slate-200 px-4 py-2.5 text-sm text-slate-600">Cancel</a><button type="submit" class="rounded-lg bg-lexie-teal px-5 py-2.5 text-sm font-semibold text-white">Save changes</button></div>
+    </form>
+  </section>
+{% endblock %}

@@ -1,0 +1,26 @@
+{% extends "api/base.html" %}
+{% block title %}Send notification{% endblock %}
+{% block page_heading %}Compose message{% endblock %}
+{% block content %}
+  <section class="mx-auto max-w-2xl">
+    <div class="mb-6">
+      <p class="eyebrow">DIRECT MESSAGE</p>
+      <h2 class="mt-2 text-2xl font-semibold text-lexie-ink">Message details</h2>
+      {% if employee %}<p class="mt-1 text-sm text-slate-500">For {{ employee.name }}</p>{% endif %}
+    </div>
+    <form method="post" class="grid gap-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+      {% csrf_token %}
+      {% for field in form %}
+        <div>
+          <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-slate-700">{{ field.label }}</label>
+          {{ field }}
+          {% for error in field.errors %}<p class="mt-1 text-xs text-rose-700" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+      {% endfor %}
+      <div class="flex justify-end gap-3 border-t border-slate-100 pt-5">
+        {% if employee %}<a href="{% url cancel_url employee.pk %}" class="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600">Cancel</a>{% else %}<a href="{% url cancel_url %}" class="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600">Cancel</a>{% endif %}
+        <button type="submit" class="rounded-lg bg-lexie-teal px-4 py-2.5 text-sm font-semibold text-white"><i data-lucide="send"></i> Send</button>
+      </div>
+    </form>
+  </section>
+{% endblock %}

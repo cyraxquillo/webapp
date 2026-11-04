@@ -1,0 +1,274 @@
+{% extends 'api/base.html' %}
+{% block title %}Attendance{% endblock %}
+{% block page_heading %}Daily records{% endblock %}
+{% block content %}
+<section class="page-shell">
+  <div class="page-heading">
+    <div class="attendance-clock" aria-live="polite">
+      <span>Asia/Manila</span>
+      <strong id="attendance-clock" data-server-now="{{ local_now|date:'c' }}">--:--:--</strong>
+    </div>
+  </div>
+  <p class="muted attendance-location-notice">Your location is collected only when you choose Time In or Time Out and is visible only to you and your managers.</p>
+
+  {% if can_use_attendance %}
+    <div class="surface attendance-actions">
+      <div>
+        <h2>{% if is_employee %}Your shift{% else %}Your attendance{% endif %}</h2>
+        {% if current_record and current_record.clock_in_at %}
+          <p>Timed in at {{ current_record.clock_in_at|date:"g:i A" }}, {% if current_record.time_in_status == "late" or current_record.status == "late" %}Late{% else %}On time{% endif %}</p>
+          {% if can_time_out %}<p><span id="hours-so-far" data-clock-in="{{ current_record.clock_in_at|date:'c' }}">{{ hours_so_far|floatformat:2 }}</span> hours so far</p>{% endif %}
+          {% if active_break %}
+            <p>On break since {{ active_break.started_at|date:"g:i A" }} · <span id="break-timer" data-break-start="{{ active_break.started_at|date:'c' }}" data-break-end="{{ active_break.auto_end_at|date:'c' }}">00:00:00</span></p>
+            <p>Your break ends automatically at {{ active_break.auto_end_at|date:"g:i A" }}.</p>
+          {% endif %}
+        {% else %}
+          <p>Not timed in yet.</p>
+        {% endif %}
+      </div>
+      <div class="attendance-location-status" aria-live="polite">
+        {% if attendance_location_status.is_outside_premises or current_record.is_outside_premises %}
+          <span id="attendance-location-status" class="status-badge warning"><i data-lucide="map-pin" aria-hidden="true"></i> Outside premises{% if attendance_location_status.distance_from_office or current_record.distance_from_office %}, {% firstof attendance_location_status.distance_from_office current_record.distance_from_office|floatformat:0 %} m away{% endif %}</span>
+        {% elif current_record.is_outside_premises == False %}
+          <span id="attendance-location-status" class="status-badge success"><i data-lucide="circle-check" aria-hidden="true"></i> Inside premises</span>
+        {% else %}
+          <span id="attendance-location-status" class="status-badge info"><i data-lucide="map-pin" aria-hidden="true"></i> Location not checked</span>
+        {% endif %}
+      </div>
+      <div class="attendance-button-group">
+        <form method="post" action="{% url 'attendance-time-in' %}">
+          {% csrf_token %}
+          <input type="hidden" name="latitude">
+          <input type="hidden" name="longitude">
+          <input type="hidden" name="accuracy">
+          <label id="outside-reason-label" {% if not attendance_location_status.is_outside_premises and not current_record.is_outside_premises %}hidden{% endif %}>Reason if outside premises
+            <textarea name="outside_reason" rows="2" maxlength="1000">{% firstof attendance_location_status.reason current_record.outside_premises_reason %}</textarea>
+          </label>
+          <button class="primary-button attendance-time-in" type="submit" {% if not can_time_in %}disabled{% endif %}>Time In</button>
+        </form>
+        {% if is_employee and active_break %}
+          <form method="post" action="{% url 'attendance-break-end' %}">
+            {% csrf_token %}
+            <button class="secondary-button" type="submit" {% if not can_end_break %}disabled{% endif %}>End Break</button>
+          </form>
+        {% elif is_employee %}
+          <form method="post" action="{% url 'attendance-break-start' %}">
+            {% csrf_token %}
+            <button class="secondary-button" type="submit" {% if not can_start_break %}disabled{% endif %}>Start Break</button>
+          </form>
+        {% endif %}
+        <form class="attendance-time-out-form" method="post" action="{% url 'attendance-time-out' %}">
+          {% csrf_token %}
+          <input type="hidden" name="latitude">
+          <input type="hidden" name="longitude">
+          <input type="hidden" name="accuracy">
+          <button class="secondary-button" type="submit" {% if not can_time_out %}disabled{% endif %}>Time Out</button>
+          {% if not can_time_out %}<span class="attendance-button-hint">Time in first</span>{% endif %}
+        </form>
+      </div>
+      <p id="attendance-location-message" role="status" aria-live="polite"></p>
+      {% if not can_time_in and not current_record.clock_in_at %}<p role="status">Time In opens at {{ settings.attendance_time_in_open_time|time:"g:i A" }}</p>{% endif %}
+      {% if not break_window_open %}<p role="status">{{ break_window_message }}</p>{% elif not current_record or not current_record.clock_in_at %}<p role="status">Time In before starting a break.</p>{% elif current_record.clock_out_at %}<p role="status">A break cannot be started after Time Out.</p>{% endif %}
+      {% if can_time_out %}
+        <p id="time-out-countdown" data-expected-time-out="{{ expected_time_out|date:'c' }}" aria-live="polite"></p>
+      {% elif current_record and current_record.time_out_status == "no_time_out" %}
+        <p>No Time Out</p>
+      {% elif current_record and current_record.clock_out_at %}
+        <p>Timed out at {{ current_record.clock_out_at|date:"g:i A" }} · {{ current_record.attendance_status }}</p>
+        {% if current_record.time_out_status == "on_time" and current_record.clock_out_at > expected_time_out %}<p id="recorded-overtime" data-expected-time-out="{{ expected_time_out|date:'c' }}" data-clock-out="{{ current_record.clock_out_at|date:'c' }}"></p>{% endif %}
+      {% endif %}
+      <div id="attendance-break-intervals" hidden>
+        {% if current_record %}
+          {% for attendance_break in current_record.breaks.all %}
+            <span data-break-start="{{ attendance_break.started_at|date:'c' }}" data-break-end="{% if attendance_break.ended_at %}{{ attendance_break.ended_at|date:'c' }}{% endif %}" data-auto-end="{{ attendance_break.auto_end_at|date:'c' }}"></span>
+          {% endfor %}
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+
+  {% if today_rows %}
+    <div class="surface overflow-x-auto">
+      <div class="page-heading compact-heading"><div><p class="eyebrow">Today</p><h2>Team roster</h2></div></div>
+      <table class="data-table">
+        <thead><tr><th>Team member</th><th>Time In</th><th>Time Out</th><th>Time In Status</th><th>Time Out Status</th><th>Status</th><th>Location</th></tr></thead>
+        <tbody>
+          {% for row in today_rows %}
+            <tr>
+              <td><strong>{% if row.employee %}{{ row.employee.name }}{% else %}{{ row.user.name }}{% endif %}</strong><small>{% if row.employee %}{{ row.employee.employee_code }}{% else %}{{ row.user.get_role_display }}{% endif %}</small></td>
+              <td>{% if row.record and row.record.clock_in_at %}{{ row.record.clock_in_at|date:"g:i A" }}{% else %}—{% endif %}</td>
+              <td>{% if row.record and row.record.clock_out_at and row.record.time_out_status != "no_time_out" %}{{ row.record.clock_out_at|date:"g:i A" }}{% else %}—{% endif %}</td>
+              <td>{{ row.time_in_status }}</td>
+              <td>{{ row.time_out_status }}</td>
+              <td>{{ row.status }}</td>
+              <td>{% if row.record.is_outside_premises is True %}<span class="status-badge warning"><i data-lucide="map-pin" aria-hidden="true"></i> Outside</span>{% elif row.record.is_outside_premises is False %}<span class="status-badge success"><i data-lucide="circle-check" aria-hidden="true"></i> Inside</span>{% else %}<span class="status-badge info"><i data-lucide="info" aria-hidden="true"></i> Unknown</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="7">No active team members on today's roster.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+
+  {% if can_correct %}
+    <div class="surface mt-6 overflow-x-auto">
+      <div class="page-heading compact-heading">
+        <div><p class="eyebrow">Manual correction</p><h2>Adjustments</h2></div>
+      </div>
+      <table class="data-table">
+        <thead><tr><th>Employee</th><th>Date</th><th>Current status</th><th>Action</th></tr></thead>
+        <tbody>
+          {% for record in correction_records %}
+            <tr>
+              <td><strong>{{ record.display_name }}</strong><small>{% if record.employee %}{{ record.employee.employee_code }}{% else %}{{ record.account.get_role_display }}{% endif %}</small></td>
+              <td>{{ record.work_date|date:"M j, Y" }}</td>
+              <td>{{ record.attendance_status }}</td>
+              <td><a class="secondary-button" href="{% url 'attendance-correct' record.pk %}">Correct</a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4">No attendance records available for correction.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+
+  <div class="surface mt-6 overflow-x-auto">
+    <div class="page-heading compact-heading"><div><p class="eyebrow">{{ today|date:"F Y" }}</p><h2>Monthly summary</h2></div></div>
+    <table class="data-table">
+      <thead>
+        <tr>{% if not is_employee %}<th>Employee</th>{% endif %}<th>Date</th><th>Time In</th><th>Time Out</th><th>Break</th><th>Hours</th><th>Status</th><th>Location</th><th>Distance</th><th>Coordinates</th><th>Points</th></tr>
+      </thead>
+      <tbody>
+        {% for record in records %}
+          <tr>
+            {% if not is_employee %}<td><strong>{{ record.display_name }}</strong><small>{% if record.employee %}{{ record.employee.employee_code }}{% elif record.account %}{{ record.account.get_role_display }}{% endif %}</small></td>{% endif %}
+            <td>{{ record.work_date|date:"M j, Y" }}</td>
+            <td>{% if record.clock_in_at %}{{ record.clock_in_at|date:"g:i A" }}{% else %}—{% endif %}</td>
+            <td>{% if record.clock_out_at and record.time_out_status != "no_time_out" %}{{ record.clock_out_at|date:"g:i A" }}{% elif record.time_out_status == "no_time_out" %}No Time Out{% else %}—{% endif %}</td>
+            <td>{% if record.active_break %}On break{% else %}{{ record.break_minutes }} min{% endif %}</td>
+            <td>{% if record.hours is not None %}{{ record.hours|floatformat:2 }}{% elif record.live_hours is not None %}{{ record.live_hours|floatformat:2 }}{% elif record.clock_in_at and not record.clock_out_at %}In progress{% else %}—{% endif %}</td>
+            <td>{{ record.attendance_status }}</td>
+            <td>{% if record.is_outside_premises is True %}<span class="status-badge warning"><i data-lucide="map-pin" aria-hidden="true"></i> Outside</span>{% elif record.is_outside_premises is False %}<span class="status-badge success"><i data-lucide="circle-check" aria-hidden="true"></i> Inside</span>{% else %}<span class="status-badge info"><i data-lucide="info" aria-hidden="true"></i> Unknown</span>{% endif %}</td>
+            <td>{% if record.distance_from_office is not None %}{{ record.distance_from_office|floatformat:0 }} m{% else %}—{% endif %}</td>
+            <td>{% if record.latitude is not None and record.longitude is not None %}{{ record.latitude|floatformat:6 }}, {{ record.longitude|floatformat:6 }}{% else %}—{% endif %}</td>
+            <td>{{ record.points|floatformat:2 }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="{% if is_employee %}10{% else %}11{% endif %}">No attendance records this month.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
+{% block page_scripts %}
+<script>
+  const clock = document.getElementById('attendance-clock');
+  const serverTime = new Date(clock.dataset.serverNow).getTime();
+  const loadedAt = Date.now();
+  const expectedTimeOut = document.getElementById('time-out-countdown');
+  const recordedOvertime = document.getElementById('recorded-overtime');
+  const hoursSoFar = document.getElementById('hours-so-far');
+  const breakTimer = document.getElementById('break-timer');
+  const locationStatus = document.getElementById('attendance-location-status');
+  const breakIntervals = [...document.querySelectorAll('#attendance-break-intervals [data-break-start]')];
+  const maximumGpsAccuracy = 100;
+
+  function locationErrorMessage(error) {
+    if (error.code === 1) return 'Location permission was denied. Allow location access in your browser and try again.';
+    if (error.code === 2) return 'Your device could not determine a location. Check that GPS/location services are on.';
+    if (error.code === 3) return 'Location request timed out. Move to an open area and try again.';
+    return 'Unable to get your location. Check browser permissions and try again.';
+  }
+
+  document.querySelectorAll('.attendance-actions form[action*="time-in"], .attendance-actions form[action*="time-out"]').forEach((form) => {
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const message = document.getElementById('attendance-location-message');
+      const submit = form.querySelector('button[type="submit"]');
+      if (!navigator.geolocation) {
+        message.textContent = 'This browser does not support location access. Use a supported browser to record attendance.';
+        return;
+      }
+      submit.disabled = true;
+      message.textContent = 'Getting your location…';
+      if (locationStatus) {
+        locationStatus.className = 'status-badge info';
+        locationStatus.textContent = 'Checking location…';
+      }
+      navigator.geolocation.getCurrentPosition((position) => {
+        if (position.coords.accuracy > maximumGpsAccuracy) {
+          message.textContent = `GPS accuracy is too low (±${Math.round(position.coords.accuracy)} m). Move to an open area and try again.`;
+          if (locationStatus) locationStatus.textContent = 'Location unavailable';
+          submit.disabled = false;
+          return;
+        }
+        form.elements.latitude.value = position.coords.latitude;
+        form.elements.longitude.value = position.coords.longitude;
+        form.elements.accuracy.value = position.coords.accuracy;
+        form.submit();
+      }, (error) => {
+        message.textContent = locationErrorMessage(error);
+        if (locationStatus) locationStatus.textContent = 'Location unavailable';
+        submit.disabled = false;
+      }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+    });
+  });
+
+  function secondsOnBreak(now) {
+    return breakIntervals.reduce((total, interval) => {
+      const start = new Date(interval.dataset.breakStart).getTime();
+      const autoEnd = new Date(interval.dataset.autoEnd).getTime();
+      const recordedEnd = interval.dataset.breakEnd
+        ? new Date(interval.dataset.breakEnd).getTime()
+        : now;
+      const end = Math.min(now, autoEnd, recordedEnd);
+      return total + Math.max(0, end - start) / 1000;
+    }, 0);
+  }
+
+  function formatDuration(totalSeconds) {
+    const seconds = Math.floor(Math.max(0, totalSeconds));
+    const hours = String(Math.floor(seconds / 3600)).padStart(2, '0');
+    const minutes = String(Math.floor((seconds % 3600) / 60)).padStart(2, '0');
+    const remainder = String(seconds % 60).padStart(2, '0');
+    return `${hours}:${minutes}:${remainder}`;
+  }
+
+  function updateAttendanceClock() {
+    const now = new Date(serverTime + (Date.now() - loadedAt));
+    clock.textContent = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit', second: '2-digit'
+    }).format(now);
+    if (expectedTimeOut) {
+      const remaining = new Date(expectedTimeOut.dataset.expectedTimeOut).getTime() - now.getTime();
+      const totalMinutes = Math.floor(Math.abs(remaining) / 60000);
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+      expectedTimeOut.textContent = remaining > 0
+        ? `Time Out in ${hours}h ${minutes}m`
+        : `Overtime ${hours}h ${minutes}m · daily points are capped`;
+    }
+    if (recordedOvertime) {
+      const overtime = new Date(recordedOvertime.dataset.clockOut).getTime()
+        - new Date(recordedOvertime.dataset.expectedTimeOut).getTime();
+      const totalMinutes = Math.floor(overtime / 60000);
+      recordedOvertime.textContent = `Overtime ${Math.floor(totalMinutes / 60)}h ${totalMinutes % 60}m · daily points are capped`;
+    }
+    if (hoursSoFar) {
+      const elapsed = now.getTime() - new Date(hoursSoFar.dataset.clockIn).getTime();
+      hoursSoFar.textContent = Math.max(0, (elapsed / 1000 - secondsOnBreak(now.getTime())) / 3600).toFixed(2);
+    }
+    if (breakTimer) {
+      const startedAt = new Date(breakTimer.dataset.breakStart).getTime();
+      const endsAt = new Date(breakTimer.dataset.breakEnd).getTime();
+      breakTimer.textContent = formatDuration((Math.min(now.getTime(), endsAt) - startedAt) / 1000);
+    }
+  }
+
+  updateAttendanceClock();
+  setInterval(updateAttendanceClock, 1000);
+</script>
+{% endblock %}

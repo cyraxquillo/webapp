@@ -1,7 +1,17 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 
-from .models import Client, Department, Employee, Evaluation, Prediction, User
+from .models import (
+    Client,
+    Department,
+    Employee,
+    Evaluation,
+    OfficeLocation,
+    Prediction,
+    Submission,
+    TrustedDevice,
+    User,
+)
 
 
 @admin.register(User)
@@ -23,4 +33,31 @@ class UserAdmin(DjangoUserAdmin):
     filter_horizontal = ("groups", "user_permissions")
 
 
-admin.site.register((Department, Employee, Evaluation, Prediction, Client))
+admin.site.register((Department, Employee, Evaluation, Prediction, Submission, Client))
+
+
+@admin.register(OfficeLocation)
+class OfficeLocationAdmin(admin.ModelAdmin):
+    list_display = ("name", "latitude", "longitude", "allowed_radius_meters", "outside_time_in_policy", "is_active")
+    list_filter = ("is_active", "outside_time_in_policy")
+    search_fields = ("name",)
+
+    def has_module_permission(self, request):
+        return request.user.is_authenticated and request.user.role == User.Role.admin
+
+    def has_add_permission(self, request):
+        return request.user.is_authenticated and request.user.role == User.Role.admin
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_authenticated and request.user.role == User.Role.admin
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_authenticated and request.user.role == User.Role.admin
+
+
+@admin.register(TrustedDevice)
+class TrustedDeviceAdmin(admin.ModelAdmin):
+    list_display = ("label", "user", "status", "created_at", "last_used_at", "approved_by")
+    list_filter = ("status", "created_at")
+    search_fields = ("label", "user__email", "ip_address")
+    readonly_fields = ("token_hash",)

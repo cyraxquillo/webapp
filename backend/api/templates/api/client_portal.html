@@ -1,0 +1,26 @@
+{% extends "api/base.html" %}
+{% block title %}Client portal{% endblock %}
+{% block page_heading %}Account overview{% endblock %}
+{% block content %}
+  <section class="mb-6">
+    <p class="text-xs font-semibold uppercase tracking-[.16em] text-lexie-teal">Client portal</p>
+    <h2 class="mt-2 text-2xl font-semibold text-lexie-ink">{{ client.company_name }}</h2>
+    <p class="mt-1 text-sm text-slate-500">Your Lexie Staffing services and account renewal information.</p>
+  </section>
+  <section class="grid gap-4 md:grid-cols-3">
+    <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Company</p>
+      <p class="mt-2 text-lg font-semibold text-lexie-ink">{{ client.company_name }}</p>
+      <p class="mt-1 text-sm text-slate-500">Client code {{ client.client_code }}</p>
+    </article>
+    <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Services</p>
+      <p class="mt-2 whitespace-pre-line text-sm text-lexie-ink">{{ client.services_used }}</p>
+    </article>
+    <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Next renewal</p>
+      <p class="mt-2 text-lg font-semibold text-lexie-ink">{% if client.next_renewal_date %}{{ client.next_renewal_date|date:"F j, Y" }}{% else %}Not scheduled{% endif %}</p>
+      <p class="mt-1 text-sm text-slate-500">Account status: {{ client.account_status|title }}</p>
+    </article>
+  </section>
+{% endblock %}

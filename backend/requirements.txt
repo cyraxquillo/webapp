@@ -1,15 +1,14 @@
-# Django application and retained JSON API compatibility
-Django>=5.2,<7.0
+# Django backend runtime
+Django>=5.2,<6.0
 djangorestframework>=3.16,<4.0
 djangorestframework-simplejwt>=5.5,<6.0
 django-cors-headers>=4.7,<5.0
+whitenoise>=6.9,<7.0
+firebase-admin>=6.9,<8.0
 python-dotenv>=1.1,<2.0
+Pillow>=10.0,<13.0
 
-# Optional SQL database drivers (SQLite is included with Python)
-psycopg[binary]>=3.2,<4.0
-PyMySQL>=1.1,<2.0
-
-# Existing trained prediction model runtime
-pandas>=2.2
-scikit-learn>=1.6
+# Prediction model runtime
 joblib>=1.4
+pandas==2.2.3
+scikit-learn==1.6.1

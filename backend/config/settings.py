@@ -1,15 +1,41 @@
 import os
+import logging
+import sqlite3
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+logger = logging.getLogger(__name__)
 load_dotenv(BASE_DIR / ".env")
 
-SECRET_KEY = os.getenv("SECRET_KEY", "development-only-change-this-secret")
+SECRET_KEY = os.getenv("SECRET_KEY", "")
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY must be set before starting Django")
+
 DEBUG = os.getenv("DEBUG", "false").lower() in {"1", "true", "yes"}
-ALLOWED_HOSTS = [host.strip() for host in os.getenv("ALLOWED_HOSTS", "127.0.0.1,localhost").split(",") if host.strip()]
+SECURE_SSL_REDIRECT = os.getenv(
+    "SECURE_SSL_REDIRECT",
+    "false" if DEBUG else "true",
+).lower() in {"1", "true", "yes"}
+SECURE_HSTS_SECONDS = int(
+    os.getenv("SECURE_HSTS_SECONDS", "0" if DEBUG else "3600")
+)
+SESSION_COOKIE_HTTPONLY = os.getenv("SESSION_COOKIE_HTTPONLY", "true").lower() in {
+    "1",
+    "true",
+    "yes",
+}
+X_FRAME_OPTIONS = os.getenv("X_FRAME_OPTIONS", "DENY")
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.getenv(
+        "ALLOWED_HOSTS",
+        "127.0.0.1,localhost",
+    ).split(",")
+    if host.strip()
+]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -27,11 +53,14 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "api.middleware.AutoEndBreakMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
+    "api.middleware.RequirePasswordChangeMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
@@ -46,6 +75,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "api.context_processors.notification_count",
             ],
         },
     },
@@ -66,36 +96,46 @@ def database_config():
         else:
             name = Path(path.lstrip("/")) if not Path(path).is_absolute() else Path(path)
             name = str((BASE_DIR / name).resolve()) if not Path(name).is_absolute() else str(name)
-        return {"ENGINE": "django.db.backends.sqlite3", "NAME": name}
+
+        sqlite_options = {"timeout": 30}
+        if name != ":memory:":
+            try:
+                with sqlite3.connect(name, timeout=30) as connection:
+                    connection.execute("PRAGMA journal_mode=WAL")
+                    connection.execute("PRAGMA synchronous=NORMAL")
+                    connection.execute("PRAGMA busy_timeout = 30000")
+            except sqlite3.Error as error:
+                logger.warning(
+                    "Could not enable SQLite WAL mode for %s: %s",
+                    name,
+                    error,
+                )
+        return {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": name,
+            "OPTIONS": sqlite_options,
+        }
     if parsed.scheme in {"postgres", "postgresql", "postgresql+psycopg"}:
+        query = parse_qs(parsed.query)
         return {
             "ENGINE": "django.db.backends.postgresql",
             "NAME": unquote(parsed.path.lstrip("/")),
             "USER": unquote(parsed.username or ""),
             "PASSWORD": unquote(parsed.password or ""),
-            "HOST": parsed.hostname or "",
-            "PORT": parsed.port or "",
+            "HOST": parsed.hostname or unquote(query.get("host", [""])[0]),
+            "PORT": parsed.port or query.get("port", [""])[0],
             "CONN_MAX_AGE": 60,
         }
-    if parsed.scheme in {"mysql", "mysql+pymysql"}:
-        return {
-            "ENGINE": "django.db.backends.mysql",
-            "NAME": unquote(parsed.path.lstrip("/")),
-            "USER": unquote(parsed.username or ""),
-            "PASSWORD": unquote(parsed.password or ""),
-            "HOST": parsed.hostname or "",
-            "PORT": parsed.port or "",
-            "CONN_MAX_AGE": 60,
-            "OPTIONS": {"charset": "utf8mb4"},
-        }
-    raise ValueError("DATABASE_URL must use sqlite, postgresql, or mysql")
+    raise ValueError("DATABASE_URL must use sqlite or postgresql")
 
 
 DATABASES = {"default": database_config()}
-if DATABASES["default"]["ENGINE"] == "django.db.backends.mysql":
-    import pymysql
-
-    pymysql.install_as_MySQLdb()
+USE_FIRESTORE = os.getenv("USE_FIRESTORE", "false").lower() in {"1", "true", "yes"}
+FIRESTORE_SYNC_ENABLED = os.getenv("FIRESTORE_SYNC_ENABLED", "false").lower() in {
+    "1",
+    "true",
+    "yes",
+}
 
 AUTH_USER_MODEL = "api.User"
 LOGIN_URL = "/login/"
@@ -109,10 +149,40 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 LANGUAGE_CODE = "en-us"
-TIME_ZONE = os.getenv("TIME_ZONE", "Asia/Manila")
+TIME_ZONE = "Asia/Manila"
 USE_I18N = True
 USE_TZ = True
-STATIC_URL = "static/"
+STATIC_URL = "/static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SECURE_COOKIES = os.getenv("SECURE_COOKIES", "false").lower() in {"1", "true", "yes"}
+DEVICE_VERIFICATION_ENABLED = os.getenv(
+    "DEVICE_VERIFICATION_ENABLED",
+    "true",
+).lower() in {"1", "true", "yes"}
+ADMIN_DEVICE_APPROVAL_REQUIRED = os.getenv(
+    "ADMIN_DEVICE_APPROVAL_REQUIRED",
+    "false",
+).lower() in {"1", "true", "yes"}
+EMAIL_HOST_CONFIGURED = bool(os.getenv("EMAIL_HOST", "").strip())
+SESSION_COOKIE_SECURE = SECURE_COOKIES
+CSRF_COOKIE_SECURE = SECURE_COOKIES
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv(
+        "CSRF_TRUSTED_ORIGINS",
+        "",
+    ).split(",")
+    if origin.strip()
+]
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 LOGGING = {
@@ -160,6 +230,9 @@ REST_FRAMEWORK = {
         "rest_framework.renderers.JSONRenderer",
     ),
     "UNAUTHENTICATED_USER": "django.contrib.auth.models.AnonymousUser",
+    "DEFAULT_THROTTLE_RATES": {
+        "login": "5/minute",
+    },
 }
 SIMPLE_JWT = {
     "SIGNING_KEY": SECRET_KEY,

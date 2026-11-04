@@ -1,0 +1,34 @@
+{% extends "api/base.html" %}
+{% block title %}Notifications{% endblock %}
+{% block page_heading %}Latest updates{% endblock %}
+{% block content %}
+  <section class="mb-6">
+    <p class="eyebrow">INBOX</p>
+    <h2 class="mt-2 text-2xl font-semibold text-lexie-ink">Recent messages</h2>
+    <p class="mt-1 text-sm text-slate-500">{{ unread_count }} unread notification{{ unread_count|pluralize }}</p>
+  </section>
+  <section class="overflow-hidden rounded-xl border border-slate-200 bg-white">
+    <div class="divide-y divide-slate-100">
+      {% for notification in notifications %}
+        <article class="notification-item{% if not notification.read_at %} notification-item--unread{% endif %}">
+          <div class="flex min-w-0 items-start gap-3">
+            {% if notification.sender %}{% include "api/_avatar.html" with user=notification.sender size="sm" %}{% else %}<span class="avatar avatar-sm">L</span>{% endif %}
+            <div class="min-w-0">
+              <div class="flex flex-wrap items-center gap-2">
+                <h3 class="text-sm font-semibold text-lexie-ink">{{ notification.title }}</h3>
+                {% if not notification.read_at %}<span class="status-badge success">New</span>{% endif %}
+              </div>
+              <p class="mt-1 whitespace-pre-line text-sm text-slate-600">{{ notification.message }}</p>
+              <p class="mt-2 text-xs text-slate-500">{{ notification.created_at|date:"M j, Y H:i" }}{% if notification.sender %} · {{ notification.sender.name }}{% endif %}</p>
+            </div>
+          </div>
+          {% if not notification.read_at %}
+            <form method="post" action="{% url 'notification-read' notification.pk %}">{% csrf_token %}<button type="submit" class="icon-button" aria-label="Mark notification read"><i data-lucide="check"></i></button></form>
+          {% endif %}
+        </article>
+      {% empty %}
+        <p class="px-5 py-12 text-center text-sm text-slate-500">You do not have any notifications yet.</p>
+      {% endfor %}
+    </div>
+  </section>
+{% endblock %}

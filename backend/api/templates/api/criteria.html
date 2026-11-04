@@ -1,9 +1,9 @@
 {% extends "api/base.html" %}
-{% block title %}Evaluation criteria · Lexie Performance Hub{% endblock %}
-{% block page_heading %}Evaluation criteria{% endblock %}
+{% block title %}Scoring criteria{% endblock %}
+{% block page_heading %}Category labels{% endblock %}
 {% block content %}
   <section class="mx-auto max-w-2xl">
-    <div class="mb-6"><p class="text-xs font-semibold uppercase tracking-[.16em] text-lexie-teal">Admin settings</p><h2 class="mt-2 text-2xl font-semibold text-lexie-ink">Evaluation criteria</h2><p class="mt-1 text-sm leading-6 text-slate-500">Rename the five score categories used by every evaluation. The underlying score fields and stored records are unchanged.</p></div>
+    <div class="mb-6"><p class="text-xs font-semibold uppercase tracking-[.16em] text-lexie-teal">Admin settings</p><p class="mt-1 text-sm leading-6 text-slate-500">Rename the five score categories used by every evaluation. The underlying score fields and stored records are unchanged.</p></div>
     <form method="post" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
       {% csrf_token %}
       {% for field, label in criteria.items %}

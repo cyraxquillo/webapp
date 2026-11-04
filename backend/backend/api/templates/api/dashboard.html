@@ -1,0 +1,159 @@
+{% extends "api/base.html" %}
+{% block title %}Overview · Lexie Performance Hub{% endblock %}
+{% block page_heading %}Overview{% endblock %}
+{% block content %}
+  <section class="welcome-row mb-8 flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
+    <div>
+      <p class="eyebrow">PERFORMANCE INTELLIGENCE</p>
+      <h2 class="mt-2 text-2xl font-semibold tracking-tight text-lexie-ink sm:text-3xl">Good morning, {{ request.user.name|default:request.user.email }}<span> ✦</span></h2>
+      <p class="mt-2 text-sm text-slate-500">{% if is_employee %}Here is a private snapshot of your performance record.{% else %}Here is a snapshot of your workforce workspace.{% endif %}</p>
+    </div>
+  </section>
+
+  {% if is_employee %}
+    {% if employee %}
+      <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7" aria-labelledby="profile-heading">
+        <div class="flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">My profile</p>
+            <h3 id="profile-heading" class="mt-2 text-xl font-semibold text-lexie-ink">{{ employee.name }}</h3>
+            <p class="mt-1 text-sm text-slate-500">{{ employee.position }} <span class="px-1">·</span> {{ employee.department.name }}</p>
+          </div>
+          <p class="rounded-lg bg-lexie-mint px-3 py-2 text-sm font-semibold text-lexie-teal">{{ employee.employee_code }}</p>
+        </div>
+        <div class="mt-6 grid gap-3 sm:grid-cols-4">
+          <div class="rounded-xl bg-slate-50 p-4"><p class="text-xs text-slate-500">Evaluations</p><p class="mt-2 text-2xl font-semibold text-lexie-ink">{{ evaluation_count }}</p></div>
+          <div class="rounded-xl bg-slate-50 p-4"><p class="text-xs text-slate-500">Latest overall score</p><p class="mt-2 text-2xl font-semibold text-lexie-ink">{% if latest_evaluation %}{{ latest_evaluation.overall_score|floatformat:1 }}{% else %}—{% endif %}</p></div>
+          <div class="rounded-xl bg-slate-50 p-4"><p class="text-xs text-slate-500">Predictions</p><p class="mt-2 text-2xl font-semibold text-lexie-ink">{{ prediction_count }}</p></div>
+          <div class="rounded-xl bg-slate-50 p-4"><p class="text-xs text-slate-500">Classification</p>{% if latest_prediction %}<span class="mt-2 classification-badge {% if latest_prediction.predicted_category|lower == 'low' %}classification-badge--low{% elif latest_prediction.predicted_category|lower == 'average' %}classification-badge--average{% else %}classification-badge--high{% endif %}">{{ latest_prediction.predicted_category }}</span><p class="mt-2 text-xs text-slate-500">{% widthratio latest_prediction.confidence_score 1 100 %}% confidence</p>{% else %}<p class="mt-2 text-2xl font-semibold text-lexie-ink">—</p>{% endif %}</div>
+        </div>
+      </section>
+      <section class="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <h3 class="font-semibold text-lexie-ink">My performance trend</h3>
+        <div class="mt-4 h-64"><canvas id="performance-trend" aria-label="Your evaluation score trend" role="img"></canvas></div>
+        {{ trend_labels|json_script:"trend-labels" }}
+        {{ trend_values|json_script:"trend-values" }}
+      </section>
+    {% else %}
+      <section class="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900" role="status">
+        Your account is not linked to an employee profile yet. Please contact an administrator.
+      </section>
+    {% endif %}
+  {% else %}
+    <section class="stats-grid" aria-label="Workspace summary">
+    <article class="stat-card">
+      <div class="stat-head"><span>Total employees</span><span class="stat-icon"><i data-lucide="users"></i></span></div>
+      <strong class="stat-value">{{ active_employee_count }}</strong>
+      <div class="stat-detail">Active employees</div>
+    </article>
+    <article class="stat-card">
+      <div class="stat-head"><span>Avg. performance score</span><span class="stat-icon blue"><i data-lucide="bar-chart-3"></i></span></div>
+      <strong class="stat-value">{{ average_score|floatformat:1 }}</strong>
+      <div class="stat-detail">Latest available evaluations</div>
+    </article>
+    <article class="stat-card">
+      <div class="stat-head"><span>At-risk employees</span><span class="stat-icon orange"><i data-lucide="circle-alert"></i></span></div>
+      <strong class="stat-value">{{ at_risk_count }}</strong>
+      <div class="stat-detail">Needs attention this cycle</div>
+    </article>
+    <article class="stat-card">
+      <div class="stat-head"><span>Recent evaluations</span><span class="stat-icon purple"><i data-lucide="clipboard-check"></i></span></div>
+      <strong class="stat-value">{{ evaluation_count }}</strong>
+      <div class="stat-detail">Recorded evaluations</div>
+    </article>
+    </section>
+
+    <section class="dashboard-grid">
+    <div class="panel">
+      <div class="section-header"><h3>Performance trend</h3><span class="subtle-label">Monthly average</span></div>
+      <div class="mt-4 h-72"><canvas id="performance-trend" aria-label="Average monthly performance trend" role="img"></canvas></div>
+    </div>
+    <div class="panel">
+      <div class="section-header"><h3>Department comparison</h3><span class="subtle-label">Latest average</span></div>
+      <div class="mt-4 h-72"><canvas id="department-scores" aria-label="Average performance score by department" role="img"></canvas></div>
+    </div>
+    </section>
+    <section class="dashboard-grid">
+    <div class="panel table-panel">
+      <div class="section-header"><h3>Recent scores</h3><a class="text-button" href="{% url 'performance-list' %}">View performance <i data-lucide="arrow-up-right"></i></a></div>
+      <div class="table-scroll"><table><thead><tr><th>Employee</th><th>Department</th><th>Score</th><th>Classification</th><th>Date</th></tr></thead><tbody>
+        {% for evaluation in recent_evaluations %}<tr><td><a href="{% url 'employee-profile' evaluation.employee.pk %}">{{ evaluation.employee.name }}</a></td><td>{{ evaluation.employee.department.name }}</td><td><strong>{{ evaluation.overall_score|floatformat:1 }}</strong><span class="score-max">/100</span></td><td>{% if evaluation.employee.latest_prediction %}<span class="classification-badge {% if evaluation.employee.latest_prediction.predicted_category|lower == 'low' %}classification-badge--low{% elif evaluation.employee.latest_prediction.predicted_category|lower == 'average' %}classification-badge--average{% else %}classification-badge--high{% endif %}">{{ evaluation.employee.latest_prediction.predicted_category }}</span><small class="block text-slate-500">{% widthratio evaluation.employee.latest_prediction.confidence_score 1 100 %}%</small>{% else %}—{% endif %}</td><td>{{ evaluation.date|date:"M j, Y" }}</td></tr>{% empty %}<tr><td colspan="5">No recent evaluations.</td></tr>{% endfor %}
+      </tbody></table></div>
+    </div>
+    <div class="panel">
+      <div class="section-header"><h3>Top performers</h3><span class="subtle-label">At-risk watchlist</span></div>
+      <div class="dashboard-lists">
+        <div class="dashboard-list">{% for employee in top_performers %}<a href="{% url 'employee-profile' employee.pk %}" class="dashboard-person"><span><strong>{{ employee.name }}</strong><small>{{ employee.department.name }}{% if employee.latest_prediction %} · {{ employee.latest_prediction.predicted_category }} ({% widthratio employee.latest_prediction.confidence_score 1 100 %}%){% endif %}</small></span><span class="person-score">{{ employee.dashboard_score|floatformat:1 }}</span></a>{% empty %}<p class="empty-copy">No evaluation scores available yet.</p>{% endfor %}</div>
+        <div class="risk-list"><h4>At-risk employees</h4>{% for employee in at_risk_employees %}<div class="dashboard-person"><a href="{% url 'employee-profile' employee.pk %}"><span><strong>{{ employee.name }}</strong><small>{{ employee.department.name }}{% if employee.latest_prediction %} · {{ employee.latest_prediction.predicted_category }} ({% widthratio employee.latest_prediction.confidence_score 1 100 %}%){% endif %}</small></span><span class="risk-score">{{ employee.dashboard_score|floatformat:1 }}</span></a>{% if employee.user_id and employee.latest_prediction.predicted_category|lower == 'low' %}<a class="text-button" href="{% url 'notification-send' %}?employee={{ employee.pk }}">Send notification</a>{% endif %}</div>{% empty %}<p class="empty-copy">No active employees are currently below the risk threshold.</p>{% endfor %}</div>
+      </div>
+    </div>
+    </section>
+    {% if is_team_leader %}
+      <section class="panel mt-5">
+        <div class="section-header"><h3>Pending evaluations</h3><span class="subtle-label">{{ pending_evaluations|length }} awaiting review</span></div>
+        <div class="divide-y divide-slate-100">
+          {% for evaluation in pending_evaluations %}<a class="flex items-center justify-between gap-4 py-3 text-sm hover:text-lexie-teal" href="{% url 'evaluation-edit' evaluation.pk %}"><span><strong>{{ evaluation.employee.name }}</strong><small class="block text-slate-500">{{ evaluation.employee.department.name }} · {{ evaluation.cycle_month|date:"F Y" }}</small></span><span class="status-badge warning">Pending</span></a>{% empty %}<p class="py-5 text-sm text-slate-500">No evaluations are waiting for your review.</p>{% endfor %}
+        </div>
+      </section>
+    {% endif %}
+    {{ trend_labels|json_script:"trend-labels" }}
+    {{ trend_values|json_script:"trend-values" }}
+    {{ department_labels|json_script:"department-labels" }}
+    {{ department_averages|json_script:"department-values" }}
+  {% endif %}
+{% endblock %}
+{% block page_scripts %}
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    (() => {
+      const readData = (id) => {
+        const node = document.getElementById(id);
+        return node ? JSON.parse(node.textContent) : [];
+      };
+      const trendCanvas = document.getElementById("performance-trend");
+      if (trendCanvas) {
+        new Chart(trendCanvas, {
+          type: "line",
+          data: {
+            labels: readData("trend-labels"),
+            datasets: [{
+              label: "Average score",
+              data: readData("trend-values"),
+              borderColor: "#0e8f88",
+              backgroundColor: "rgba(14,143,136,.12)",
+              fill: true,
+              tension: .35
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: { y: { min: 0, max: 100 } },
+            plugins: { legend: { display: false } }
+          }
+        });
+      }
+      const departmentCanvas = document.getElementById("department-scores");
+      if (departmentCanvas) {
+        new Chart(departmentCanvas, {
+          type: "bar",
+          data: {
+            labels: readData("department-labels"),
+            datasets: [{
+              label: "Average score",
+              data: readData("department-values"),
+              backgroundColor: "#0e8f88",
+              borderRadius: 6
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: { y: { min: 0, max: 100 } },
+            plugins: { legend: { display: false } }
+          }
+        });
+      }
+    })();
+  </script>
+{% endblock %}

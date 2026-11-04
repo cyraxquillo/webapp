@@ -1,0 +1,181 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#123b4a">
+  <title>{% block title %}Lexie Performance Hub{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            lexie: {
+              ink: "#193845",
+              navy: "#123b4a",
+              teal: "#0e8f88",
+              mint: "#e8f5f1",
+              canvas: "#f5f8f8"
+            }
+          },
+          fontFamily: {
+            sans: ["DM Sans", "ui-sans-serif", "system-ui", "sans-serif"],
+            display: ["Manrope", "DM Sans", "ui-sans-serif", "system-ui", "sans-serif"]
+          }
+        }
+      }
+    };
+  </script>
+  <style>{% include "api/app_styles.css" %}</style>
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
+    import { getAnalytics, isSupported } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-analytics.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCgJOSoCRsgr3s1z9Sl4H8xZ8GGXyTBr-8",
+      authDomain: "lexie-13e6b.firebaseapp.com",
+      databaseURL: "https://lexie-13e6b-default-rtdb.firebaseio.com",
+      projectId: "lexie-13e6b",
+      storageBucket: "lexie-13e6b.firebasestorage.app",
+      messagingSenderId: "472970334645",
+      appId: "1:472970334645:web:769384b93447a537e9c9fc",
+      measurementId: "G-D0PBK7K9V8"
+    };
+
+    const firebaseApp = initializeApp(firebaseConfig);
+    if (await isSupported()) {
+      getAnalytics(firebaseApp);
+    }
+  </script>
+</head>
+<body class="min-h-screen bg-lexie-canvas text-lexie-ink antialiased">
+  {% if request.user.is_authenticated %}
+    <div id="sidebar-backdrop" data-open="false" class="sidebar-backdrop" aria-hidden="true"></div>
+    <div class="app-shell">
+      <aside id="sidebar" data-open="false" class="sidebar">
+        <div class="sidebar-top">
+          <a href="{% if request.user.role == 'client' %}{% url 'client-portal' %}{% else %}{% url 'dashboard' %}{% endif %}" class="brand" aria-label="Lexie Performance Hub home">
+            <span class="brand-mark"><i data-lucide="sparkles" aria-hidden="true"></i></span>
+            <span>lexie<span class="brand-dot">.</span></span>
+          </a>
+          <button id="sidebar-close" class="icon-button close-mobile" type="button" aria-label="Close navigation"><i data-lucide="x"></i></button>
+        </div>
+        <div class="workspace-switcher">
+          <span class="workspace-icon">L</span>
+          <span><strong>Lexie workspace</strong><small>{{ request.user.get_role_display }}</small></span>
+          <i data-lucide="chevron-down" aria-hidden="true"></i>
+        </div>
+        <nav aria-label="Main navigation">
+          {% if request.user.role == "client" %}
+            <a href="{% url 'client-portal' %}" class="nav-item{% if request.resolver_match.url_name == 'client-portal' %} active{% endif %}" {% if request.resolver_match.url_name == 'client-portal' %}aria-current="page"{% endif %}><i data-lucide="building-2"></i><span>Client overview</span></a>
+          {% else %}
+          <a href="{% url 'dashboard' %}" class="nav-item{% if request.resolver_match.url_name == 'dashboard' %} active{% endif %}" {% if request.resolver_match.url_name == 'dashboard' %}aria-current="page"{% endif %}><i data-lucide="layout-dashboard"></i><span>Overview</span></a>
+          {% if request.user.role == "admin" or request.user.role == "management" or request.user.role == "hr_manager" %}
+            <a href="{% url 'employee-list' %}" class="nav-item{% if request.resolver_match.url_name == 'employee-list' or request.resolver_match.url_name == 'employee-profile' or request.resolver_match.url_name == 'employee-create' or request.resolver_match.url_name == 'employee-edit' or request.resolver_match.url_name == 'employee-delete' %} active{% endif %}" {% if request.resolver_match.url_name == 'employee-list' or request.resolver_match.url_name == 'employee-profile' or request.resolver_match.url_name == 'employee-create' or request.resolver_match.url_name == 'employee-edit' or request.resolver_match.url_name == 'employee-delete' %}aria-current="page"{% endif %}><i data-lucide="users"></i><span>Employees</span></a>
+            <a href="{% url 'department-list' %}" class="nav-item{% if request.resolver_match.url_name == 'department-list' or request.resolver_match.url_name == 'department-create' or request.resolver_match.url_name == 'department-edit' or request.resolver_match.url_name == 'department-delete' %} active{% endif %}" {% if request.resolver_match.url_name == 'department-list' or request.resolver_match.url_name == 'department-create' or request.resolver_match.url_name == 'department-edit' or request.resolver_match.url_name == 'department-delete' %}aria-current="page"{% endif %}><i data-lucide="briefcase-business"></i><span>Departments</span></a>
+          {% elif request.user.role == "team_leader" %}
+            <a href="{% url 'my-team' %}" class="nav-item{% if request.resolver_match.url_name == 'my-team' %} active{% endif %}" {% if request.resolver_match.url_name == 'my-team' %}aria-current="page"{% endif %}><i data-lucide="users-round"></i><span>My team</span></a>
+          {% else %}
+            <a href="{% url 'employee-list' %}" class="nav-item{% if request.resolver_match.url_name == 'employee-list' or request.resolver_match.url_name == 'employee-profile' %} active{% endif %}" {% if request.resolver_match.url_name == 'employee-list' or request.resolver_match.url_name == 'employee-profile' %}aria-current="page"{% endif %}><i data-lucide="user-round"></i><span>My profile</span></a>
+          {% endif %}
+          <a href="{% url 'performance-list' %}" class="nav-item{% if request.resolver_match.url_name == 'performance-list' or request.resolver_match.url_name == 'performance-create' or request.resolver_match.url_name == 'performance-edit' %} active{% endif %}" {% if request.resolver_match.url_name == 'performance-list' or request.resolver_match.url_name == 'performance-create' or request.resolver_match.url_name == 'performance-edit' %}aria-current="page"{% endif %}><i data-lucide="bar-chart-3"></i><span>Performance</span></a>
+          <a href="{% url 'evaluation-list' %}" class="nav-item{% if request.resolver_match.url_name == 'evaluation-list' or request.resolver_match.url_name == 'evaluation-create' or request.resolver_match.url_name == 'evaluation-detail' or request.resolver_match.url_name == 'evaluation-edit' or request.resolver_match.url_name == 'evaluation-delete' or request.resolver_match.url_name == 'criteria-manage' or request.resolver_match.url_name == 'hybrid-review' %} active{% endif %}" {% if request.resolver_match.url_name == 'evaluation-list' or request.resolver_match.url_name == 'evaluation-create' or request.resolver_match.url_name == 'evaluation-detail' or request.resolver_match.url_name == 'evaluation-edit' or request.resolver_match.url_name == 'evaluation-delete' or request.resolver_match.url_name == 'criteria-manage' or request.resolver_match.url_name == 'hybrid-review' %}aria-current="page"{% endif %}><i data-lucide="clipboard-check"></i><span>Evaluations</span></a>
+          <a href="{% url 'attendance-list' %}" class="nav-item{% if request.resolver_match.url_name == 'attendance-list' or request.resolver_match.url_name == 'attendance-time-in' or request.resolver_match.url_name == 'attendance-time-out' or request.resolver_match.url_name == 'attendance-correct' %} active{% endif %}" {% if request.resolver_match.url_name == 'attendance-list' or request.resolver_match.url_name == 'attendance-time-in' or request.resolver_match.url_name == 'attendance-time-out' or request.resolver_match.url_name == 'attendance-correct' %}aria-current="page"{% endif %}><i data-lucide="calendar-check"></i><span>Attendance</span></a>
+          <a href="{% url 'submission-list' %}" class="nav-item{% if request.resolver_match.url_name == 'submission-list' or request.resolver_match.url_name == 'submission-create' or request.resolver_match.url_name == 'submission-review' %} active{% endif %}" {% if request.resolver_match.url_name == 'submission-list' or request.resolver_match.url_name == 'submission-create' or request.resolver_match.url_name == 'submission-review' %}aria-current="page"{% endif %}><i data-lucide="folder-upload"></i><span>Submissions</span></a>
+          <a href="{% url 'prediction-list' %}" class="nav-item{% if request.resolver_match.url_name == 'prediction-list' or request.resolver_match.url_name == 'prediction-run' %} active{% endif %}" {% if request.resolver_match.url_name == 'prediction-list' or request.resolver_match.url_name == 'prediction-run' %}aria-current="page"{% endif %}><i data-lucide="sparkles"></i><span>Predictions</span></a>
+          {% if request.user.role == "admin" or request.user.role == "management" or request.user.role == "hr_manager" or request.user.role == "team_leader" %}
+            <a href="{% url 'report-view' %}" class="nav-item{% if request.resolver_match.url_name == 'report-view' or request.resolver_match.url_name == 'report-csv' or request.resolver_match.url_name == 'report-pdf' %} active{% endif %}" {% if request.resolver_match.url_name == 'report-view' or request.resolver_match.url_name == 'report-csv' or request.resolver_match.url_name == 'report-pdf' %}aria-current="page"{% endif %}><i data-lucide="file-bar-chart"></i><span>Reports</span></a>
+          {% endif %}
+          {% if request.user.role == "admin" or request.user.role == "management" %}
+            <a href="{% url 'account-list' %}" class="nav-item{% if request.resolver_match.url_name == 'account-list' or request.resolver_match.url_name == 'account-create' %} active{% endif %}" {% if request.resolver_match.url_name == 'account-list' or request.resolver_match.url_name == 'account-create' %}aria-current="page"{% endif %}><i data-lucide="shield-check"></i><span>User accounts</span></a>
+            <a href="{% url 'automation-settings' %}" class="nav-item{% if request.resolver_match.url_name == 'automation-settings' %} active{% endif %}" {% if request.resolver_match.url_name == 'automation-settings' %}aria-current="page"{% endif %}><i data-lucide="workflow"></i><span>Automation settings</span></a>
+          {% endif %}
+          {% if request.user.role == "admin" %}
+            <a href="{% url 'system-tools' %}" class="nav-item{% if request.resolver_match.url_name == 'system-tools' or request.resolver_match.url_name == 'activity-log' %} active{% endif %}"><i data-lucide="shield-check"></i><span>System tools</span></a>
+          {% endif %}
+          {% endif %}
+          <a href="{% url 'settings' %}" class="nav-item{% if request.resolver_match.url_name == 'settings' %} active{% endif %}" {% if request.resolver_match.url_name == 'settings' %}aria-current="page"{% endif %}><i data-lucide="settings"></i><span>Settings</span></a>
+        </nav>
+        <div class="sidebar-bottom">
+          <div class="help-card">
+            {% include "api/_avatar.html" with user=request.user size="sm" %}
+            <span class="help-identity"><strong>{{ request.user.name }}</strong><small>{{ request.user.email }}</small></span>
+          </div>
+          <form method="post" action="{% url 'web-logout' %}">
+            {% csrf_token %}
+            <button type="submit" class="nav-item logout"><i data-lucide="log-out"></i><span>Sign out</span></button>
+          </form>
+        </div>
+      </aside>
+      <div class="main-area">
+        <header class="topbar">
+          <div class="topbar-title">
+            <button id="menu-toggle" type="button" class="icon-button menu-button" aria-label="Open navigation" aria-expanded="false"><i data-lucide="menu"></i></button>
+            <div>
+              <p class="breadcrumb">Workspace <span>/</span> {% block breadcrumb %}{{ page_title|default:request.resolver_match.url_name|title }}{% endblock %}</p>
+              <h1>{% block page_heading %}{{ page_title|default:"Overview" }}{% endblock %}</h1>
+            </div>
+          </div>
+          <div class="topbar-actions">
+            <a href="{% url 'notification-list' %}" class="notification-link" aria-label="Notifications{% if unread_notifications_count %}, {{ unread_notifications_count }} unread{% endif %}" title="Notifications"><i data-lucide="bell"></i>{% if unread_notifications_count %}<span class="notification-count">{{ unread_notifications_count }}</span>{% endif %}</a>
+            <span class="subtle-label">{{ request.user.name }}</span>
+            {% include "api/_avatar.html" with user=request.user size="sm" %}
+          </div>
+        </header>
+        <main class="content">
+          {% if messages %}
+            <div class="messages" aria-live="polite">
+              {% for message in messages %}
+                <div class="message {% if message.tags == 'error' %}message-error{% else %}message-success{% endif %}">{{ message }}</div>
+              {% endfor %}
+            </div>
+          {% endif %}
+          {% block content %}{% endblock %}
+        </main>
+      </div>
+    </div>
+    <script>
+      (() => {
+        const sidebar = document.getElementById("sidebar");
+        const backdrop = document.getElementById("sidebar-backdrop");
+        const toggle = document.getElementById("menu-toggle");
+        const close = document.getElementById("sidebar-close");
+        const setOpen = (open) => {
+          sidebar.dataset.open = String(open);
+          backdrop.dataset.open = String(open);
+          toggle.setAttribute("aria-expanded", String(open));
+        };
+        toggle.addEventListener("click", () => setOpen(sidebar.dataset.open !== "true"));
+        close.addEventListener("click", () => setOpen(false));
+        backdrop.addEventListener("click", () => setOpen(false));
+        document.addEventListener("keydown", (event) => {
+          if (event.key === "Escape") setOpen(false);
+        });
+      })();
+      document.querySelectorAll("form[data-auto-filter]").forEach((form) => {
+        let searchTimer;
+        form.querySelectorAll("select, input[type=date]").forEach((field) => {
+          field.addEventListener("change", () => form.requestSubmit());
+        });
+        form.querySelectorAll("input[type=search]").forEach((field) => {
+          field.addEventListener("input", () => {
+            window.clearTimeout(searchTimer);
+            searchTimer = window.setTimeout(() => form.requestSubmit(), 350);
+          });
+        });
+      });
+      if (window.lucide) window.lucide.createIcons();
+    </script>
+  {% else %}
+    {% block unauthenticated_content %}{% endblock %}
+    <script>if (window.lucide) window.lucide.createIcons();</script>
+  {% endif %}
+  {% block page_scripts %}{% endblock %}
+</body>
+</html>

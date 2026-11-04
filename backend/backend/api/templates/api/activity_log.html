@@ -1,0 +1,40 @@
+{% extends "api/base.html" %}
+{% block title %}Activity Log · Lexie Performance Hub{% endblock %}
+{% block page_heading %}Activity log{% endblock %}
+{% block content %}
+<section class="mb-6">
+  <p class="eyebrow">ADMIN CONTROL</p>
+  <h2 class="mt-2 text-2xl font-semibold tracking-tight text-lexie-ink">Recent workspace activity</h2>
+</section>
+
+<section class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+  <div class="overflow-x-auto">
+    <table class="min-w-full divide-y divide-slate-100 text-left text-sm">
+      <thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
+        <tr>
+          <th class="px-5 py-4">Name</th>
+          <th class="px-5 py-4">Email</th>
+          <th class="px-5 py-4">Role</th>
+          <th class="px-5 py-4">Created</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        {% for user in recent_users %}
+          <tr class="hover:bg-slate-50">
+            <td class="px-5 py-4 font-medium text-lexie-ink">{{ user.name }}</td>
+            <td class="px-5 py-4 text-slate-600">{{ user.email }}</td>
+            <td class="px-5 py-4">
+              <span class="status-badge success">{{ user.get_role_display }}</span>
+            </td>
+            <td class="px-5 py-4 text-slate-600">{{ user.created_at|date:"M d, Y" }}</td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="4" class="px-5 py-12 text-center text-slate-500">No recent account activity recorded.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

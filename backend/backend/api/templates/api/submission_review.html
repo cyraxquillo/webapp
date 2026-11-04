@@ -1,0 +1,33 @@
+{% extends "api/base.html" %}
+{% block title %}Review Submission · Lexie Performance Hub{% endblock %}
+{% block page_heading %}Review Work Submission{% endblock %}
+{% block content %}
+<section class="mx-auto max-w-3xl">
+  <div class="mb-6">
+    <p class="eyebrow">MANAGER REVIEW</p>
+    <h2 class="mt-2 text-2xl font-semibold tracking-tight text-lexie-ink">{{ title }}</h2>
+    <p class="mt-1 text-sm text-slate-500">{{ submission.employee.name }} · {{ submission.uploaded_at|date:"M d, Y" }}</p>
+  </div>
+  <div class="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div class="flex flex-wrap items-center justify-between gap-3"><h3 class="font-semibold text-lexie-ink">{{ submission.title }}</h3><a href="{{ submission.file.url }}" target="_blank" rel="noopener noreferrer" class="text-sm font-medium text-lexie-teal">Open submitted file</a></div>
+    {% if submission.description %}<p class="mt-3 whitespace-pre-line text-sm leading-6 text-slate-600">{{ submission.description }}</p>{% endif %}
+  </div>
+  <form method="post" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+    {% csrf_token %}
+    {% if form.non_field_errors %}<div class="mb-5 rounded-lg bg-rose-50 p-3 text-sm text-rose-800">{{ form.non_field_errors }}</div>{% endif %}
+    <div class="grid gap-5 sm:grid-cols-2">
+      {% for field in form %}
+        <div class="{% if field.name == 'reviewer_comment' %}sm:col-span-2{% endif %}">
+          <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-slate-700">{{ field.label }}</label>
+          {{ field }}
+          {% for error in field.errors %}<p class="mt-1 text-xs text-rose-700" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+      {% endfor %}
+    </div>
+    <div class="mt-7 flex flex-wrap justify-end gap-3 border-t border-slate-100 pt-5">
+      <a href="{% url cancel_url %}" class="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600">Cancel</a>
+      <button type="submit" class="rounded-lg bg-lexie-teal px-5 py-2.5 text-sm font-semibold text-white hover:bg-teal-700"><i data-lucide="check"></i> Save review</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

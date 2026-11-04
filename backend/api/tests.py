@@ -5,17 +5,21 @@ import tempfile
 from urllib.parse import urlencode
 from unittest.mock import patch
 
+from django.core.cache import cache
+from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 from rest_framework.test import APITestCase
 
+from api.forms import AutomationSettingsForm
 from api.ml.predict import (
     MODEL_SOURCE,
     MODEL_VERSION,
     build_feature_vector,
     loaded_model_artifacts,
     predict_performance,
+    UnknownDepartmentError,
 )
-from .models import Department, Employee, Evaluation, Prediction, User
+from .models import AutomationSettings, Department, Employee, Evaluation, Prediction, User
 
 
 @override_settings(ALLOWED_HOSTS=["127.0.0.1", "localhost", "testserver"])
@@ -69,6 +73,9 @@ class BackendApiTests(APITestCase):
     def authenticate(self, user):
         self.client.force_authenticate(user=user)
 
+    def setUp(self):
+        cache.clear()
+
     def evaluation_payload(self, employee_id=None):
         return {
             "employee_id": employee_id or self.employee.id,
@@ -105,6 +112,24 @@ class BackendApiTests(APITestCase):
             content_type="application/x-www-form-urlencoded",
         )
         self.assertEqual(response.status_code, 401)
+
+    def test_api_login_is_throttled_after_five_failed_attempts(self):
+        for _ in range(5):
+            response = self.client.post(
+                "/auth/login",
+                {"username": "admin@lexie.ph", "password": "wrong"},
+                format="json",
+            )
+            self.assertEqual(response.status_code, 401)
+
+        response = self.client.post(
+            "/auth/login",
+            {"username": "admin@lexie.ph", "password": "wrong"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 429)
+        self.assertIn("Too many attempts. Try again later.", response.data["detail"])
 
     def test_staff_can_only_list_and_read_own_employee(self):
         self.authenticate(self.employee_user)
@@ -237,6 +262,30 @@ class BackendApiTests(APITestCase):
         self.assertEqual(response.data["model_source"], MODEL_SOURCE)
         self.assertEqual(response.data["model_version"], MODEL_VERSION)
 
+    def test_prediction_api_returns_422_for_unknown_department(self):
+        self.authenticate(self.admin)
+        unsupported = Department.objects.create(name="Teacher")
+        self.other_employee.department = unsupported
+        self.other_employee.save(update_fields=["department"])
+        evaluation = Evaluation.objects.create(
+            employee=self.other_employee,
+            evaluator=self.admin,
+            date=date(2026, 1, 15),
+            productivity_score=80,
+            attendance_score=85,
+            quality_score=90,
+            teamwork_score=88,
+            communication_score=92,
+        )
+        with self.assertRaises(UnknownDepartmentError):
+            build_feature_vector(self.other_employee, evaluation)
+
+        response = self.client.post(f"/predictions/{self.other_employee.id}")
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("Teacher", response.data["detail"])
+        self.assertIn("Recruitment", response.data["detail"])
+
 
 @override_settings(ALLOWED_HOSTS=["127.0.0.1", "localhost", "testserver"])
 class WebViewTests(TestCase):
@@ -256,6 +305,12 @@ class WebViewTests(TestCase):
             name="Web HR",
             role=User.Role.hr_manager,
         )
+        cls.management_user = User.objects.create_user(
+            email="web-management@lexie.ph",
+            password="WebTest123!",
+            name="Web Management",
+            role=User.Role.management,
+        )
         cls.employee_user = User.objects.create_user(
             email="web-employee@lexie.ph",
             password="WebTest123!",
@@ -274,7 +329,7 @@ class WebViewTests(TestCase):
             name="Web Client",
             role=User.Role.client,
         )
-        cls.department = Department.objects.create(name="Web Test Department")
+        cls.department = Department.objects.create(name="Recruitment")
         cls.employee = Employee.objects.create(
             employee_code="WEB-1001",
             user=cls.employee_user,
@@ -307,6 +362,18 @@ class WebViewTests(TestCase):
 
         self.assertRedirects(response, "/login/?next=/dashboard/")
 
+    def test_dashboard_and_reports_pages_render_for_authenticated_admin(self):
+        self.client.force_login(self.admin)
+
+        dashboard_response = self.client.get("/dashboard/")
+        reports_response = self.client.get("/reports/")
+
+        self.assertEqual(dashboard_response.status_code, 200)
+        self.assertContains(dashboard_response, "Performance trend")
+        self.assertEqual(reports_response.status_code, 200)
+        self.assertContains(reports_response, "Export results")
+        self.assertContains(reports_response, "WEB-1001")
+
     def test_login_uses_session_and_logout_ends_session(self):
         response = self.client.post(
             "/login/",
@@ -321,6 +388,22 @@ class WebViewTests(TestCase):
 
         self.assertRedirects(response, "/login/")
         self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_web_login_is_throttled_after_five_failed_attempts(self):
+        for _ in range(5):
+            response = self.client.post(
+                "/login/",
+                {"email": "WEB-ADMIN@LEXIE.PH", "password": "wrong"},
+            )
+            self.assertEqual(response.status_code, 200)
+
+        response = self.client.post(
+            "/login/",
+            {"email": "WEB-ADMIN@LEXIE.PH", "password": "wrong"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Too many attempts. Try again later.")
 
     def test_employee_dashboard_contains_only_own_profile(self):
         self.client.force_login(self.employee_user)
@@ -352,15 +435,23 @@ class WebViewTests(TestCase):
         self.assertEqual(self.client.get("/reports/").status_code, 403)
         self.assertEqual(self.client.get("/accounts/").status_code, 403)
 
-    def test_hr_can_create_department_and_employee(self):
+    def test_hr_can_create_department_and_employee_with_derived_fields(self):
         self.client.force_login(self.hr_user)
 
         department_response = self.client.post(
             "/departments/add/",
-            {"name": "Client Services", "description": "Client support", "is_active": "on"},
+            {"name": "Client Services", "description": "Client support"},
         )
         self.assertRedirects(department_response, "/departments/")
         department = Department.objects.get(name="Client Services")
+        self.assertTrue(department.is_active)
+
+        add_response = self.client.get("/employees/add/")
+        form = add_response.context["form"]
+        self.assertEqual(
+            set(form.fields),
+            {"user", "team_leader", "name", "department", "position", "date_hired"},
+        )
 
         employee_response = self.client.post(
             "/employees/add/",
@@ -369,16 +460,84 @@ class WebViewTests(TestCase):
                 "department": department.pk,
                 "position": "Coordinator",
                 "date_hired": "2025-02-01",
-                "status": "active",
-                "attendance_rate": "96",
-                "tenure_months": "12",
-                "training_hours": "20",
             },
         )
         self.assertRedirects(employee_response, "/employees/")
         employee = Employee.objects.get(name="Created Employee")
         self.assertTrue(employee.employee_code.startswith("EMP-"))
         self.assertEqual(employee.department, department)
+        self.assertEqual(employee.status, Employee.Status.active)
+        self.assertIsNone(employee.attendance_rate)
+        self.assertIsNone(employee.training_hours)
+        self.assertGreaterEqual(employee.tenure_months, 0)
+
+    def test_department_status_is_not_exposed_when_creating_and_cannot_deactivate_with_active_employee(self):
+        self.client.force_login(self.hr_user)
+        add_response = self.client.get("/departments/add/")
+        self.assertNotIn("is_active", add_response.context["form"].fields)
+
+        edit_response = self.client.post(
+            f"/departments/{self.department.pk}/edit/",
+            {
+                "name": self.department.name,
+                "description": self.department.description,
+                "is_active": "inactive",
+            },
+        )
+        self.assertEqual(edit_response.status_code, 200)
+        self.assertContains(
+            edit_response,
+            "Cannot deactivate this department while active employees remain.",
+        )
+        self.department.refresh_from_db()
+        self.assertTrue(self.department.is_active)
+
+    def test_management_can_change_employee_status_from_profile(self):
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            f"/employees/{self.employee.pk}/status/", {"status": "on_leave"}
+        )
+        self.assertRedirects(response, f"/employees/{self.employee.pk}/")
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.status, Employee.Status.on_leave)
+
+    def test_monthly_evaluation_starts_after_new_employee_hire_month(self):
+        employee = Employee.objects.create(
+            employee_code="WEB-NEW-1",
+            name="New Employee",
+            department=self.department,
+            position="Analyst",
+            date_hired=date(2026, 1, 15),
+            status=Employee.Status.active,
+        )
+        from api.automation import create_monthly_evaluations
+
+        created = create_monthly_evaluations(date(2026, 1, 15))
+        self.assertFalse(employee.evaluations.exists())
+        self.assertFalse(any(item.employee == employee for item in created))
+
+        created = create_monthly_evaluations(date(2026, 2, 1))
+        new_employee_evaluations = [
+            item for item in created if item.employee == employee
+        ]
+        self.assertEqual(len(new_employee_evaluations), 1)
+        self.assertEqual(new_employee_evaluations[0].cycle_month, date(2026, 2, 1))
+
+    def test_prediction_run_shows_unknown_department_error(self):
+        unsupported = Department.objects.create(name="Teacher")
+        self.employee.department = unsupported
+        self.employee.save(update_fields=["department"])
+        self.client.force_login(self.admin)
+
+        response = self.client.post(
+            "/predictions/run/",
+            {"action": "single", "employee_id": self.employee.pk},
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Teacher")
+        self.assertContains(response, "not supported by the trained model")
 
     def test_department_with_employees_cannot_be_deleted(self):
         self.client.force_login(self.admin)
@@ -472,6 +631,51 @@ class WebViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "Other Employee")
 
+    def test_prediction_page_shows_latest_prediction_for_each_evaluation(self):
+        for evaluation_date in (date(2026, 2, 15), date(2026, 3, 15)):
+            Evaluation.objects.create(
+                employee=self.employee,
+                evaluator=self.admin,
+                date=evaluation_date,
+                productivity_score=80,
+                attendance_score=85,
+                quality_score=90,
+                teamwork_score=88,
+                communication_score=92,
+            )
+
+        self.client.force_login(self.admin)
+        response = self.client.get("/predictions/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "latest prediction for each evaluation")
+        self.assertContains(response, "Feb 15, 2026")
+        self.assertContains(response, "Mar 15, 2026")
+        displayed_evaluation_ids = {
+            prediction.evaluation_id for prediction in response.context["predictions"]
+        }
+        expected_evaluation_ids = set(
+            Evaluation.objects.filter(employee=self.employee).values_list("pk", flat=True)
+        )
+        self.assertEqual(displayed_evaluation_ids, expected_evaluation_ids)
+        self.assertEqual(len(response.context["predictions"]), len(expected_evaluation_ids))
+
+    def test_score_drop_threshold_must_be_greater_than_zero_and_at_most_100(self):
+        valid_form = AutomationSettingsForm(data={"score_drop_threshold": "10"})
+        valid_form.is_valid()
+        self.assertNotIn("score_drop_threshold", valid_form.errors)
+        for invalid_value in ("0", "-1", "100.01"):
+            with self.subTest(value=invalid_value):
+                form = AutomationSettingsForm(
+                    data={"score_drop_threshold": invalid_value}
+                )
+                form.is_valid()
+                self.assertIn("score_drop_threshold", form.errors)
+                with self.assertRaises(ValidationError):
+                    AutomationSettings(
+                        score_drop_threshold=float(invalid_value)
+                    ).full_clean()
+
     def test_admin_can_run_model_prediction_and_view_feature_importance(self):
         trained_department, _ = Department.objects.get_or_create(name="Recruitment")
         self.employee.department = trained_department
@@ -505,23 +709,77 @@ class WebViewTests(TestCase):
     def test_reports_export_filtered_csv_and_pdf(self):
         self.client.force_login(self.hr_user)
 
+        self.client.force_login(self.employee_user)
+        self.assertEqual(self.client.get("/reports/export.csv").status_code, 403)
+        self.assertEqual(self.client.get("/reports/export.pdf").status_code, 403)
+
+        self.client.force_login(self.hr_user)
+
         csv_response = self.client.get(
             "/reports/export.csv",
             {"department": self.department.pk, "start_date": "2026-01-01", "end_date": "2026-01-31"},
         )
         self.assertEqual(csv_response.status_code, 200)
         self.assertIn("text/csv", csv_response["Content-Type"])
+        self.assertIn("lexie-performance-report-", csv_response["Content-Disposition"])
+        self.assertTrue(csv_response["Content-Disposition"].endswith(".csv\""))
         self.assertIn(b"WEB-1001", csv_response.content)
         self.assertNotIn(b"WEB-1002", csv_response.content)
 
         pdf_response = self.client.get("/reports/export.pdf")
         self.assertEqual(pdf_response.status_code, 200)
         self.assertEqual(pdf_response["Content-Type"], "application/pdf")
+        self.assertIn("lexie-performance-report-", pdf_response["Content-Disposition"])
+        self.assertTrue(pdf_response["Content-Disposition"].endswith(".pdf\""))
         self.assertTrue(pdf_response.content.startswith(b"%PDF-1.4"))
 
     def test_accounts_and_settings_are_role_scoped_and_forms_work(self):
         self.client.force_login(self.hr_user)
         self.assertEqual(self.client.get("/accounts/").status_code, 403)
+
+        self.client.force_login(self.management_user)
+        response = self.client.get("/accounts/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "User accounts")
+        self.assertEqual(self.client.get("/system-tools/").status_code, 403)
+
+        unlinked_employee = Employee.objects.create(
+            employee_code="WEB-1003-MGMT",
+            name="Unlinked Employee",
+            department=self.department,
+            position="Analyst",
+            date_hired=date(2025, 3, 1),
+        )
+        response = self.client.post(
+            "/accounts/add/",
+            {
+                "name": "New Team Leader",
+                "email": "new-team-leader@lexie.ph",
+                "role": User.Role.team_leader,
+                "password1": "Strong-Test-Password-123!",
+                "password2": "Strong-Test-Password-123!",
+            },
+        )
+        self.assertRedirects(response, "/accounts/")
+        created_user = User.objects.get(email="new-team-leader@lexie.ph")
+        self.assertEqual(created_user.role, User.Role.team_leader)
+
+        response = self.client.post(
+            "/accounts/add/",
+            {
+                "name": "New Staff Account",
+                "email": "new-staff-account@lexie.ph",
+                "role": User.Role.staff,
+                "employee": unlinked_employee.pk,
+                "password1": "Strong-Test-Password-123!",
+                "password2": "Strong-Test-Password-123!",
+            },
+        )
+        self.assertRedirects(response, "/accounts/")
+        staff_user = User.objects.get(email="new-staff-account@lexie.ph")
+        self.assertEqual(staff_user.role, User.Role.staff)
+        unlinked_employee.refresh_from_db()
+        self.assertEqual(unlinked_employee.user, staff_user)
 
         self.client.force_login(self.admin)
         unlinked_employee = Employee.objects.create(

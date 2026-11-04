@@ -1,0 +1,50 @@
+{% extends "api/base.html" %}
+{% block title %}Sign in · Lexie Performance Hub{% endblock %}
+{% block unauthenticated_content %}
+  <main class="login-page">
+    <section class="login-art">
+      <a href="{% url 'home' %}" class="brand" aria-label="Lexie Performance Hub home">
+        <span class="brand-mark"><i data-lucide="sparkles" aria-hidden="true"></i></span>
+        <span>lexie<span class="brand-dot">.</span></span>
+      </a>
+      <div class="art-copy">
+        <p class="eyebrow">PERFORMANCE INTELLIGENCE</p>
+        <h1>Make every<br><em>contribution</em><br>count.</h1>
+        <p>A clearer view of people performance, built for the teams shaping what comes next.</p>
+      </div>
+      <p class="art-footer"><span>Lexie Staffing &amp; Business Consulting</span><span>© 2026</span></p>
+    </section>
+    <section class="login-panel">
+      <div class="login-card">
+        <div class="login-heading">
+          <p class="eyebrow">WELCOME BACK</p>
+          <h2>Sign in to your workspace</h2>
+          <p>Use your Lexie account credentials.</p>
+        </div>
+        {% if messages %}
+          <div class="login-messages" aria-live="polite">
+            {% for message in messages %}
+              <p role="alert">{{ message }}</p>
+            {% endfor %}
+          </div>
+        {% endif %}
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{{ request.GET.next }}">
+          <label>
+            Email address
+            <input type="email" name="email" value="{{ email|default:'admin@lexie.ph' }}" autocomplete="username" required autofocus>
+          </label>
+          <label>
+            Password
+            <input type="password" name="password" autocomplete="current-password" required>
+          </label>
+          <button type="submit" class="primary-button">
+            Enter workspace <i data-lucide="arrow-up-right" aria-hidden="true"></i>
+          </button>
+        </form>
+        <p class="demo-note"><i data-lucide="circle-check" aria-hidden="true"></i> Seeded admin account is prefilled for local testing.</p>
+      </div>
+    </section>
+  </main>
+{% endblock %}

@@ -5,13 +5,23 @@ from django.contrib.auth import authenticate
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from .access import (
+    MANAGEMENT_ROLES,
+    TEAM_ROLES,
+    VIEWER_ROLES,
+    employee_queryset_for,
+    evaluation_queryset_for,
+    is_management,
+    prediction_queryset_for,
+)
 from .models import Client, Department, Employee, Evaluation, Prediction, User
-from .permissions import IsAdmin, IsAdminOrManager, IsClient
+from .login_throttling import LoginRateThrottle
+from .permissions import IsAdmin, IsAdminOrManager, IsClient, IsManagementOrTeamLeader
 from .serializers import (
     ClientSerializer,
     DepartmentSerializer,
@@ -50,13 +60,6 @@ def user_has_role(user, *roles):
     return user.is_authenticated and user.role in roles
 
 
-def employee_queryset_for(user):
-    queryset = Employee.objects.select_related("department", "user")
-    if user.role in {User.Role.staff, User.Role.employee}:
-        queryset = queryset.filter(user_id=user.id)
-    return queryset
-
-
 def find_employee(employee_id):
     queryset = Employee.objects.select_related("department", "user")
     if employee_id.isdigit():
@@ -64,14 +67,9 @@ def find_employee(employee_id):
     return queryset.filter(employee_code=employee_id).first()
 
 
-def ensure_employee_access(employee, user):
-    if user.role in {User.Role.staff, User.Role.employee} and employee.user_id != user.id:
-        return role_denied()
-    return None
-
-
 @api_view(["POST"])
 @permission_classes([AllowAny])
+@throttle_classes([LoginRateThrottle])
 def login_view(request):
     username = request.data.get("username", "")
     password = request.data.get("password", "")
@@ -102,8 +100,10 @@ def auth_me(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAdmin])
+@permission_classes([IsAuthenticated])
 def register_user(request):
+    if request.user.role != User.Role.admin:
+        return role_denied()
     serializer = UserCreateSerializer(data=request.data)
     if not serializer.is_valid():
         if "email" in serializer.errors and "An account with this email already exists" in str(serializer.errors["email"]):
@@ -163,7 +163,7 @@ def notification_preferences(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def departments(request):
-    if not user_has_role(request.user, User.Role.admin, User.Role.hr_manager):
+    if not is_management(request.user):
         return role_denied()
     return Response(DepartmentSerializer(Department.objects.filter(is_active=True), many=True).data)
 
@@ -173,7 +173,7 @@ def departments(request):
 def employees(request):
     user = request.user
     if request.method == "GET":
-        if not user_has_role(user, User.Role.admin, User.Role.hr_manager, User.Role.staff, User.Role.employee):
+        if user.role not in VIEWER_ROLES:
             return role_denied()
         queryset = employee_queryset_for(user)
         search = request.query_params.get("search")
@@ -195,7 +195,7 @@ def employees(request):
         if status_filter is not None and status_filter not in {"active", "inactive"}:
             return Response({"detail": "status must be active or inactive"}, status=422)
         return Response(EmployeeSerializer(queryset.order_by("name")[skip:skip + limit], many=True).data)
-    if not user_has_role(user, User.Role.admin, User.Role.hr_manager):
+    if not is_management(user):
         return role_denied()
     serializer = EmployeeSerializer(data=request.data)
     if not serializer.is_valid():
@@ -210,22 +210,38 @@ def employees(request):
 @api_view(["GET", "PUT", "DELETE"])
 @permission_classes([IsAuthenticated])
 def employee_detail(request, employee_id):
-    employee = find_employee(employee_id)
+    queryset = employee_queryset_for(request.user)
+    employee = (
+        queryset.filter(pk=int(employee_id)).first()
+        if employee_id.isdigit()
+        else queryset.filter(employee_code=employee_id).first()
+    )
     if employee is None:
+        if employee_id.isdigit():
+            exists = Employee.objects.filter(pk=int(employee_id)).exists()
+        else:
+            exists = Employee.objects.filter(employee_code=employee_id).exists()
+        if exists:
+            return Response({"detail": "You do not have permission to access this employee"}, status=403)
         return Response({"detail": "Employee not found"}, status=404)
-    access_error = ensure_employee_access(employee, request.user)
-    if access_error:
-        return access_error
     if request.method == "GET":
-        if not user_has_role(request.user, User.Role.admin, User.Role.hr_manager, User.Role.staff, User.Role.employee):
+        if request.user.role not in VIEWER_ROLES:
             return role_denied()
         return Response(EmployeeSerializer(employee).data)
-    if not user_has_role(request.user, User.Role.admin, User.Role.hr_manager):
+    if request.method == "DELETE" and not is_management(request.user):
+        return role_denied()
+    if request.method == "PUT" and request.user.role not in TEAM_ROLES:
         return role_denied()
     if request.method == "DELETE":
         employee.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
-    serializer = EmployeeSerializer(employee, data=request.data, partial=True)
+    data = request.data
+    if request.user.role == User.Role.team_leader:
+        data = request.data.copy()
+        data.pop("user_id", None)
+        data.pop("team_leader_id", None)
+        data.pop("department", None)
+    serializer = EmployeeSerializer(employee, data=data, partial=True)
     if not serializer.is_valid():
         return Response(serializer.errors, status=422)
     try:
@@ -240,11 +256,9 @@ def employee_detail(request, employee_id):
 def evaluations(request):
     user = request.user
     if request.method == "GET":
-        if not user_has_role(user, User.Role.admin, User.Role.hr_manager, User.Role.staff, User.Role.employee):
+        if user.role not in VIEWER_ROLES:
             return role_denied()
-        queryset = Evaluation.objects.select_related("employee", "employee__department", "evaluator")
-        if user.role in {User.Role.staff, User.Role.employee}:
-            queryset = queryset.filter(employee__user_id=user.id)
+        queryset = evaluation_queryset_for(user)
         employee_id = request.query_params.get("employee_id")
         if employee_id is not None:
             try:
@@ -255,8 +269,11 @@ def evaluations(request):
         if error:
             return error
         return Response(EvaluationSerializer(queryset.order_by("-date", "-id")[skip:skip + limit], many=True).data)
-    if not user_has_role(user, User.Role.admin, User.Role.hr_manager):
+    if user.role not in TEAM_ROLES:
         return role_denied()
+    employee_id = request.data.get("employee_id")
+    if not str(employee_id or "").isdigit() or not employee_queryset_for(user).filter(pk=int(employee_id)).exists():
+        return Response({"detail": "Employee not found"}, status=404)
     serializer = EvaluationSerializer(data=request.data, context={"request": request})
     if not serializer.is_valid():
         return Response(serializer.errors, status=422)
@@ -267,16 +284,18 @@ def evaluations(request):
 @api_view(["GET", "PUT", "DELETE"])
 @permission_classes([IsAuthenticated])
 def evaluation_detail(request, evaluation_id):
-    evaluation = Evaluation.objects.select_related("employee", "evaluator").filter(pk=evaluation_id).first()
+    evaluation = evaluation_queryset_for(request.user).filter(pk=evaluation_id).first()
     if evaluation is None:
+        if Evaluation.objects.filter(pk=evaluation_id).exists():
+            return Response({"detail": "You do not have permission to access this evaluation"}, status=403)
         return Response({"detail": "Evaluation not found"}, status=404)
-    if request.user.role in {User.Role.staff, User.Role.employee} and evaluation.employee.user_id != request.user.id:
-        return Response({"detail": "You can only access your own evaluations"}, status=403)
     if request.method == "GET":
-        if not user_has_role(request.user, User.Role.admin, User.Role.hr_manager, User.Role.staff, User.Role.employee):
+        if request.user.role not in VIEWER_ROLES:
             return role_denied()
         return Response(EvaluationSerializer(evaluation).data)
-    if not user_has_role(request.user, User.Role.admin, User.Role.hr_manager):
+    if request.method == "DELETE" and not is_management(request.user):
+        return role_denied()
+    if request.method == "PUT" and request.user.role not in TEAM_ROLES:
         return role_denied()
     if request.method == "DELETE":
         evaluation.delete()
@@ -292,11 +311,9 @@ def evaluation_detail(request, evaluation_id):
 @permission_classes([IsAuthenticated])
 def predictions(request):
     user = request.user
-    if not user_has_role(user, User.Role.admin, User.Role.hr_manager, User.Role.staff, User.Role.employee):
+    if user.role not in VIEWER_ROLES:
         return role_denied()
-    queryset = Prediction.objects.select_related("employee", "employee__department")
-    if user.role in {User.Role.staff, User.Role.employee}:
-        queryset = queryset.filter(employee__user_id=user.id)
+    queryset = prediction_queryset_for(user)
     employee_id = request.query_params.get("employee_id")
     if employee_id is not None:
         try:
@@ -310,20 +327,27 @@ def predictions(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAdminOrManager])
+@permission_classes([IsManagementOrTeamLeader])
 def create_prediction(request, employee_id):
-    employee = find_employee(employee_id)
+    queryset = employee_queryset_for(request.user)
+    employee = (
+        queryset.filter(pk=int(employee_id)).first()
+        if employee_id.isdigit()
+        else queryset.filter(employee_code=employee_id).first()
+    )
     if employee is None:
         return Response({"detail": "Employee not found"}, status=404)
     evaluation = employee.evaluations.order_by("-date", "-id").first()
     if evaluation is None:
         return Response({"detail": "Cannot predict performance without an evaluation"}, status=422)
     try:
-        from .ml import ModelUnavailableError, predict_performance
+        from .ml import ModelUnavailableError, UnknownDepartmentError, predict_performance
 
         result = predict_performance(employee, evaluation)
     except ModelUnavailableError as error:
         return Response({"detail": str(error)}, status=503)
+    except UnknownDepartmentError as error:
+        return Response({"detail": str(error)}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
     except ValueError as error:
         return Response({"detail": str(error)}, status=422)
     prediction = Prediction.objects.create(employee=employee, **result)
@@ -341,10 +365,10 @@ def create_prediction(request, employee_id):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def report_summary(request):
-    if not user_has_role(request.user, User.Role.admin, User.Role.hr_manager):
+    if request.user.role not in TEAM_ROLES:
         return role_denied()
-    active_employees = Employee.objects.filter(status="active").select_related("department")
-    evaluations = Evaluation.objects.select_related("employee", "employee__department").order_by("-date", "-id")
+    active_employees = employee_queryset_for(request.user).filter(status="active")
+    evaluations = evaluation_queryset_for(request.user).order_by("-date", "-id")
     latest_by_employee = {}
     for evaluation in evaluations:
         latest_by_employee.setdefault(evaluation.employee_id, evaluation)
@@ -374,10 +398,10 @@ def report_summary(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def performance_trend(request):
-    if not user_has_role(request.user, User.Role.admin, User.Role.hr_manager):
+    if request.user.role not in TEAM_ROLES:
         return role_denied()
     month_scores = defaultdict(list)
-    for evaluation in Evaluation.objects.order_by("date"):
+    for evaluation in evaluation_queryset_for(request.user).order_by("date"):
         month_scores[evaluation.date.strftime("%Y-%m")].append(evaluation.overall_score)
     return Response([
         {"month": month, "score": round(sum(scores) / len(scores), 2)}

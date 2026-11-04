@@ -1,0 +1,46 @@
+{% extends "api/base.html" %}
+{% block title %}Work Submissions{% endblock %}
+{% block page_heading %}Uploads{% endblock %}
+{% block content %}
+<section class="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+  <div>
+    <p class="eyebrow">WORKSPACE</p>
+    <h2 class="mt-2 text-2xl font-semibold tracking-tight text-lexie-ink">{% if user.role == 'admin' or user.role == 'management' or user.role == 'hr_manager' %}Review queue{% else %}Your files{% endif %}</h2>
+    <p class="mt-1 text-sm text-slate-500">{% if user.role == 'admin' or user.role == 'management' or user.role == 'hr_manager' %}Review and manage submissions across the workspace.{% else %}Upload, track, and review your submitted work.{% endif %}</p>
+  </div>
+  {% if user.role == 'staff' or user.role == 'employee' %}
+    <a href="{% url 'submission-create' %}" class="inline-flex items-center justify-center gap-2 rounded-lg bg-lexie-teal px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-700"><i data-lucide="plus" aria-hidden="true"></i> Upload work</a>
+  {% endif %}
+</section>
+<section class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+  <div class="overflow-x-auto">
+    <table class="min-w-full divide-y divide-slate-100 text-left text-sm">
+      <thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500"><tr><th>Title</th><th>Employee</th><th>Uploaded</th><th>Status</th><th>File</th><th>Review</th></tr></thead>
+      <tbody class="divide-y divide-slate-100">
+        {% for submission in submissions %}
+          <tr class="hover:bg-slate-50">
+            <td class="px-5 py-4 font-medium text-lexie-ink">{{ submission.title }}</td>
+            <td class="px-5 py-4 text-slate-600">{% if user.role == 'admin' or user.role == 'hr_manager' %}{{ submission.employee.name }}{% else %}You{% endif %}</td>
+            <td class="px-5 py-4 text-slate-600">{{ submission.uploaded_at|date:"M d, Y" }} · {{ submission.uploaded_at|time:"h:i A" }}</td>
+            <td class="px-5 py-4"><span class="status-badge {% if submission.status == 'reviewed' %}success{% else %}warning{% endif %}">{{ submission.status|title }}</span></td>
+            <td class="px-5 py-4"><a href="{{ submission.file.url }}" target="_blank" rel="noopener noreferrer" class="text-lexie-teal hover:underline">Open file</a></td>
+            <td class="px-5 py-4">
+              {% if can_review %}<a href="{% url 'submission-review' submission.pk %}" class="icon-button" aria-label="Review {{ submission.title }}"><i data-lucide="eye"></i></a>{% else %}—{% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="6" class="px-5 py-12 text-center">
+              <div class="mx-auto flex max-w-sm flex-col items-center gap-2 text-slate-500">
+                <span class="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-500" aria-hidden="true"><i data-lucide="folder-open"></i></span>
+                <span class="text-sm font-medium text-slate-700">No work submissions yet</span>
+                <span class="text-xs">{% if user.role == 'admin' or user.role == 'hr_manager' %}Employees have not uploaded work for review yet.{% else %}Upload your first document to get started.{% endif %}</span>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

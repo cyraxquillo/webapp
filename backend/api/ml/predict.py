@@ -99,19 +99,24 @@ def loaded_model_artifacts() -> tuple[Any, Any, Any, Any]:
     return rf_model, le_department, le_target, feature_columns
 
 
+def supported_department_names() -> tuple[str, ...]:
+    _, department_encoder, _, _ = loaded_model_artifacts()
+    return tuple(str(name) for name in department_encoder.classes_)
+
+
 def build_feature_vector(employee: Employee, latest_evaluation: Evaluation) -> pd.DataFrame:
     model, department_encoder, _, columns = loaded_model_artifacts()
 
     try:
         department_encoded = int(department_encoder.transform([employee.department.name])[0])
     except ValueError as error:
-        recognized = ", ".join(str(value) for value in department_encoder.classes_)
+        recognized = ", ".join(supported_department_names())
         raise UnknownDepartmentError(
-            f"Department '{employee.department.name}' is not recognized by the trained model. "
-            f"Use one of: {recognized}"
+            f"Department '{employee.department.name}' is not supported by the trained "
+            f"model. Supported departments: {recognized}."
         ) from error
 
-    attendance_rate = employee.attendance_rate
+    attendance_rate = employee.attendance_rate if employee.attendance_rate is not None else 0.0
     if attendance_rate > 1:
         attendance_rate /= 100
 
@@ -126,7 +131,7 @@ def build_feature_vector(employee: Employee, latest_evaluation: Evaluation) -> p
         "teamwork_score": to_five_point_rating(latest_evaluation.teamwork_score),
         "communication_score": to_five_point_rating(latest_evaluation.communication_score),
         "tenure_months": employee.tenure_months,
-        "training_hours": employee.training_hours,
+        "training_hours": employee.training_hours if employee.training_hours is not None else 0.0,
         "department_encoded": department_encoded,
     }
     ordered_columns = list(getattr(model, "feature_names_in_", columns))

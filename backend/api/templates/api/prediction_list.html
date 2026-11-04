@@ -1,20 +1,11 @@
 {% extends "api/base.html" %}
-{% block title %}Predictions · Lexie Performance Hub{% endblock %}
-{% block page_heading %}Predictions{% endblock %}
+{% block title %}Predictions{% endblock %}
+{% block page_heading %}Model results{% endblock %}
 {% block content %}
   <section class="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-    <div><p class="text-xs font-semibold uppercase tracking-[.16em] text-lexie-teal">Model insights</p><h2 class="mt-2 text-2xl font-semibold text-lexie-ink">Predictions</h2><p class="mt-1 text-sm text-slate-500">Model predictions are based on the latest saved evaluation for each employee.</p></div>
-    {% if can_predict %}<form method="post" action="{% url 'prediction-run' %}">{% csrf_token %}<input type="hidden" name="action" value="batch"><button class="rounded-lg border border-lexie-teal px-4 py-2.5 text-sm font-semibold text-lexie-teal hover:bg-lexie-mint"><i data-lucide="sparkles"></i> Run batch predictions</button></form>{% endif %}
+    <div><p class="text-xs font-semibold uppercase tracking-[.16em] text-lexie-teal">Model insights</p><p class="mt-1 text-sm text-slate-500">Shows the latest prediction for each evaluation, so earlier evaluation results remain available.</p></div>
+    {% if can_predict %}<form method="post" action="{% url 'prediction-run' %}">{% csrf_token %}<input type="hidden" name="action" value="batch"><button class="rounded-lg border border-lexie-teal px-3 py-2 text-xs font-semibold text-lexie-teal hover:bg-lexie-mint"><i data-lucide="refresh-cw"></i> Re-run</button></form>{% endif %}
   </section>
-  {% if can_predict %}
-    <form method="post" action="{% url 'prediction-run' %}" class="mb-6 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-end">
-      {% csrf_token %}<input type="hidden" name="action" value="single">
-      <label class="flex-1 text-xs font-medium text-slate-500">Employee
-        <select name="employee_id" required class="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm"><option value="">Select an employee</option>{% for employee in employees %}<option value="{{ employee.pk }}">{{ employee.name }} · {{ employee.department.name }}</option>{% endfor %}</select>
-      </label>
-      <button class="rounded-lg bg-lexie-teal px-4 py-2.5 text-sm font-semibold text-white"><i data-lucide="sparkles"></i> Run prediction</button>
-    </form>
-  {% endif %}
   {% if importance %}
     <section class="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <h3 class="font-semibold text-lexie-ink">Latest model feature importance</h3>
@@ -26,13 +17,13 @@
     </section>
   {% endif %}
   <section class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-    <form method="get" class="flex flex-wrap items-end gap-3 border-b border-slate-100 p-4">
-      {% if can_predict %}<label class="text-xs font-medium text-slate-500">Employee<select name="employee" class="mt-1 block min-w-56 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"><option value="">All employees</option>{% for employee in employees %}<option value="{{ employee.pk }}" {% if employee.pk|stringformat:"s" == selected_employee %}selected{% endif %}>{{ employee.name }}</option>{% endfor %}</select></label>{% endif %}
-      <button class="rounded-lg bg-lexie-navy px-4 py-2 text-sm text-white"><i data-lucide="sliders-horizontal"></i> Filter</button>
+    <form method="get" data-auto-filter class="flex flex-wrap items-end gap-3 border-b border-slate-100 p-4">
+      <label class="text-xs font-medium text-slate-500">Employee<select name="employee" class="mt-1 block min-w-56 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"><option value="">All employees</option>{% for employee in employee_options %}<option value="{{ employee.pk }}" {% if employee.pk|stringformat:"s" == selected_employee %}selected{% endif %}>{{ employee.name }}</option>{% endfor %}</select></label>
+      <div class="filter-action-group self-end"><a href="{% url 'prediction-list' %}" class="filter-action-link rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600">Clear</a></div>
     </form>
     <div class="overflow-x-auto"><table class="min-w-full divide-y divide-slate-100 text-left text-sm">
-      <thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500"><tr><th class="px-5 py-3">Created</th><th class="px-5 py-3">Employee</th><th class="px-5 py-3">Predicted level</th><th class="px-5 py-3">Confidence</th><th class="px-5 py-3">Model</th></tr></thead>
-      <tbody class="divide-y divide-slate-100">      {% for prediction in predictions %}<tr><td class="whitespace-nowrap px-5 py-3 text-slate-600">{{ prediction.created_at|date:"M j, Y H:i" }}</td><td class="px-5 py-3 font-medium text-lexie-ink">{{ prediction.employee.name }}</td><td class="px-5 py-3">{{ prediction.predicted_category }}</td><td class="px-5 py-3 font-semibold text-lexie-teal">{% widthratio prediction.confidence_score 1 100 %}%</td><td class="px-5 py-3 text-xs text-slate-500">{{ prediction.model_version }}</td></tr>{% empty %}<tr><td colspan="5" class="px-5 py-12 text-center text-sm text-slate-500">No prediction results are available.</td></tr>{% endfor %}</tbody>
+      <thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500"><tr><th class="px-5 py-3">Employee</th><th class="px-5 py-3">Department</th><th class="px-5 py-3">Evaluation date</th><th class="px-5 py-3">Classification</th><th class="px-5 py-3">Confidence</th><th class="px-5 py-3">Classified</th><th class="px-5 py-3">Model</th></tr></thead>
+      <tbody class="divide-y divide-slate-100">{% for prediction in predictions %}<tr><td class="px-5 py-3 font-medium text-lexie-ink">{{ prediction.employee.name }}</td><td class="px-5 py-3 text-slate-600">{{ prediction.employee.department.name }}</td><td class="px-5 py-3 text-slate-600">{% if prediction.evaluation %}{{ prediction.evaluation.date|date:"M j, Y" }}{% else %}—{% endif %}</td><td class="px-5 py-3"><span class="classification-badge {% if prediction.predicted_category|lower == 'low' %}classification-badge--low{% elif prediction.predicted_category|lower == 'average' %}classification-badge--average{% else %}classification-badge--high{% endif %}">{{ prediction.predicted_category }}</span></td><td class="px-5 py-3 font-semibold text-lexie-teal">{% widthratio prediction.confidence_score 1 100 %}%</td><td class="px-5 py-3 text-slate-600">{{ prediction.created_at|date:"M j, Y H:i" }}</td><td class="px-5 py-3 text-xs text-slate-500">{{ prediction.model_version }}</td></tr>{% empty %}<tr><td colspan="7" class="px-5 py-12 text-center text-sm text-slate-500">No predictions match this filter.</td></tr>{% endfor %}</tbody>
     </table></div>
   </section>
 {% endblock %}

@@ -1,0 +1,27 @@
+{% extends "api/base.html" %}
+{% block title %}Team{% endblock %}
+{% block page_heading %}Assigned members{% endblock %}
+{% block content %}
+  <section class="mb-6">
+    <p class="eyebrow">TEAM OVERVIEW</p>
+    <p class="mt-1 text-sm text-slate-500">{{ employees|length }} assigned member{{ employees|length|pluralize }}</p>
+  </section>
+  <section class="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+    <table class="min-w-full divide-y divide-slate-100 text-left text-sm">
+      <thead class="bg-slate-50 text-xs uppercase text-slate-500"><tr><th class="px-5 py-3">Employee</th><th class="px-5 py-3">Department</th><th class="px-5 py-3">Position</th><th class="px-5 py-3">Latest score</th><th class="px-5 py-3">Evaluation date</th></tr></thead>
+      <tbody class="divide-y divide-slate-100">
+        {% for employee in employees %}
+          <tr>
+            <td class="px-5 py-4"><a class="person-cell" href="{% url 'employee-profile' employee.pk %}">{% include "api/_avatar.html" with user=employee.user size="sm" %}<span><strong>{{ employee.name }}</strong><small>{{ employee.employee_code }}</small></span></a></td>
+            <td class="px-5 py-4">{{ employee.department.name }}</td>
+            <td class="px-5 py-4">{{ employee.position }}</td>
+            <td class="px-5 py-4">{% if employee.latest_evaluation %}<strong>{{ employee.latest_evaluation.overall_score|floatformat:1 }}</strong><span class="text-slate-500"> / 100</span>{% else %}—{% endif %}</td>
+            <td class="px-5 py-4">{% if employee.latest_evaluation %}{{ employee.latest_evaluation.date|date:"M j, Y" }}{% else %}—{% endif %}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="px-5 py-12 text-center text-slate-500">No employees are assigned to your team yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+{% endblock %}

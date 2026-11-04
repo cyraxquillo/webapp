@@ -1,0 +1,47 @@
+{% extends 'api/base.html' %}
+{% block title %}Attendance correction{% endblock %}
+{% block page_heading %}Correct record{% endblock %}
+{% block content %}
+<section class="page-shell">
+  <div class="page-heading">
+    <div>
+      <p class="eyebrow">Correction record</p>
+      <p>{{ record.employee.name }} · {{ record.work_date|date:"F j, Y" }} · {{ record.attendance_status }}</p>
+    </div>
+  </div>
+  <form method="post" class="surface max-w-2xl">
+    {% csrf_token %}
+    <div class="form-grid">
+      <label class="field full-field">
+        New status
+        <select name="status" required>
+          {% for value, label in record.Status.choices %}
+            <option value="{{ value }}" {% if record.status == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="field">
+        Corrected Time In
+        <input type="datetime-local" name="clock_in_at" value="{{ clock_in_local }}">
+      </label>
+      <label class="field">
+        Corrected Time Out
+        <input type="datetime-local" name="clock_out_at" value="{{ clock_out_local }}">
+      </label>
+      {% if record.status == "early_out" %}
+        <label class="field full-field">
+          <span><input type="checkbox" name="excuse_time_out" {% if record.time_out_status == "excused" %}checked{% endif %}> Excuse this early Time Out and award full Time Out points</span>
+        </label>
+      {% endif %}
+      <label class="field full-field">
+        Correction reason
+        <textarea name="reason" rows="4" required placeholder="Explain the correction and why it was necessary."></textarea>
+      </label>
+    </div>
+    <div class="form-actions">
+      <a class="secondary-button" href="{% url 'attendance-list' %}">Cancel</a>
+      <button class="primary-button" type="submit">Save correction</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

@@ -1,0 +1,14 @@
+{% extends "api/base.html" %}
+{% block title %}User accounts · Lexie Performance Hub{% endblock %}
+{% block page_heading %}User accounts{% endblock %}
+{% block content %}
+  <section class="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+    <div><p class="eyebrow">ADMINISTRATION</p><h2 class="mt-2 text-2xl font-semibold text-lexie-ink">User accounts</h2><p class="mt-1 text-sm text-slate-500">{{ accounts }} active workforce account records.</p></div>
+    <a href="{% url 'account-create' %}" class="rounded-lg bg-lexie-teal px-4 py-2.5 text-sm font-semibold text-white"><i data-lucide="plus"></i> Create account</a>
+  </section>
+  <section class="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <table class="min-w-full divide-y divide-slate-100 text-left text-sm"><thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500"><tr><th class="px-5 py-3">Name</th><th class="px-5 py-3">Email</th><th class="px-5 py-3">Role</th><th class="px-5 py-3">Linked employee</th><th class="px-5 py-3">Status</th></tr></thead>
+      <tbody class="divide-y divide-slate-100">{% for account in users %}<tr><td class="px-5 py-3 font-medium text-lexie-ink">{{ account.name }}</td><td class="px-5 py-3 text-slate-600">{{ account.email }}</td><td class="px-5 py-3">{{ account.get_role_display }}</td><td class="px-5 py-3">{% if account.employee %}<a class="text-lexie-teal hover:underline" href="{% url 'employee-profile' account.employee.pk %}">{{ account.employee.employee_code }} · {{ account.employee.name }}</a>{% else %}—{% endif %}</td><td class="px-5 py-3">{% if account.is_active %}Active{% else %}Inactive{% endif %}</td></tr>{% empty %}<tr><td colspan="5" class="px-5 py-12 text-center text-sm text-slate-500">No accounts found.</td></tr>{% endfor %}</tbody>
+    </table>
+  </section>
+{% endblock %}

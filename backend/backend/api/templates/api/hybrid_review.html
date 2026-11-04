@@ -1,0 +1,4 @@
+{% extends 'api/base.html' %}
+{% block content %}
+<section class="page-shell"><div class="page-heading"><div><p class="eyebrow">Hybrid review</p><h1>{{ evaluation.employee.name }}</h1><p>{{ evaluation.cycle_month|date:"F Y" }} · {{ evaluation.get_status_display }}</p></div></div><form method="post" class="surface max-w-2xl">{% csrf_token %}<div class="form-grid">{% for field in form %}<label class="field full-field">{{ field.label }}{{ field }}{% if field.errors %}<small class="field-error">{{ field.errors.0 }}</small>{% endif %}</label>{% endfor %}</div><div class="form-actions"><a class="secondary-button" href="{% url 'evaluation-detail' evaluation.pk %}">Cancel</a><button class="primary-button" type="submit">Save hybrid score</button></div></form></section>
+{% endblock %}

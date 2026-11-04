@@ -1,0 +1,17 @@
+{% load static %}
+{% if user and user.photo %}
+  <img
+    src="{{ user.photo.url }}"
+    alt="{{ user.name|default:user.email }}"
+    class="avatar{% if size %} avatar-{{ size }}{% endif %} avatar-photo"
+    loading="lazy"
+  >
+{% elif user %}
+  <span class="avatar{% if size %} avatar-{{ size }}{% endif %}" aria-label="{{ user.name|default:user.email }} initial avatar">
+    {{ user.name|default:user.email|slice:":1"|upper }}
+  </span>
+{% else %}
+  <span class="avatar{% if size %} avatar-{{ size }}{% endif %}" aria-label="Unlinked employee account">
+    ?
+  </span>
+{% endif %}

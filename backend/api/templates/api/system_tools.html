@@ -1,0 +1,60 @@
+{% extends "api/base.html" %}
+{% block title %}System tools{% endblock %}
+{% block page_heading %}Platform operations{% endblock %}
+{% block content %}
+<section class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+  <div>
+    <p class="eyebrow">ADMIN CONTROL</p>
+    <h2 class="mt-2 text-2xl font-semibold tracking-tight text-lexie-ink">Maintenance tasks</h2>
+    <p class="mt-1 text-sm text-slate-500">Monitor the workspace, refresh model resources, and review recent activity.</p>
+  </div>
+  <a href="{% url 'activity-log' %}" class="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:border-slate-300">View activity log</a>
+</section>
+
+<div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+  <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Accounts</p>
+    <p class="mt-4 text-3xl font-bold text-lexie-ink">{{ user_count }}</p>
+  </div>
+  <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Employees</p>
+    <p class="mt-4 text-3xl font-bold text-lexie-ink">{{ employee_count }}</p>
+  </div>
+  <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Submissions</p>
+    <p class="mt-4 text-3xl font-bold text-lexie-ink">{{ submission_count }}</p>
+  </div>
+  <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <p class="text-xs uppercase tracking-[0.18em] text-slate-500">Predictions</p>
+    <p class="mt-4 text-3xl font-bold text-lexie-ink">{{ prediction_count }}</p>
+  </div>
+</div>
+
+<div class="mt-6 grid gap-6 lg:grid-cols-2">
+  <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+    <h3 class="text-lg font-semibold text-lexie-ink">Quick actions</h3>
+    <div class="mt-4 space-y-3">
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="sync_predictions">
+        <button type="submit" class="inline-flex w-full items-center justify-center rounded-lg bg-lexie-teal px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-700">Refresh prediction model</button>
+      </form>
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="reset_demo_data">
+        <button type="submit" class="inline-flex w-full items-center justify-center rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:border-slate-300">Reset demo data</button>
+      </form>
+    </div>
+  </section>
+
+  <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+    <h3 class="text-lg font-semibold text-lexie-ink">System status</h3>
+    <ul class="mt-4 space-y-3 text-sm text-slate-600">
+      <li class="flex items-center justify-between border-b border-slate-100 pb-2"><span>Current role</span><strong class="text-slate-800">{{ admin_label }}</strong></li>
+      <li class="flex items-center justify-between border-b border-slate-100 pb-2"><span>Authentication</span><strong class="text-emerald-600">Active</strong></li>
+      <li class="flex items-center justify-between border-b border-slate-100 pb-2"><span>Data integrity</span><strong class="text-emerald-600">Healthy</strong></li>
+      <li class="flex items-center justify-between"><span>Workspace mode</span><strong class="text-slate-800">Admin</strong></li>
+    </ul>
+  </section>
+</div>
+{% endblock %}

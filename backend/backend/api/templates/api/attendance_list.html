@@ -1,0 +1,157 @@
+{% extends 'api/base.html' %}
+{% block content %}
+<section class="page-shell">
+  <div class="page-heading">
+    <div>
+      <p class="eyebrow">Attendance</p>
+      <h1>Attendance records</h1>
+    </div>
+    <div class="attendance-clock" aria-live="polite">
+      <span>Asia/Manila</span>
+      <strong id="attendance-clock" data-server-now="{{ local_now|date:'c' }}">--:--:--</strong>
+    </div>
+  </div>
+
+  {% if is_employee %}
+    <div class="surface attendance-actions">
+      <div>
+        <h2>Today's attendance</h2>
+        {% if current_record and current_record.clock_in_at %}
+          <p>Timed in at {{ current_record.clock_in_at|date:"g:i A" }}, {% if current_record.time_in_status == "late" or current_record.status == "late" %}Late{% else %}On time{% endif %}</p>
+          {% if can_time_out %}<p><span id="hours-so-far" data-clock-in="{{ current_record.clock_in_at|date:'c' }}">{{ hours_so_far|floatformat:2 }}</span> hours so far</p>{% endif %}
+        {% else %}
+          <p>Not timed in yet.</p>
+        {% endif %}
+      </div>
+      <div class="attendance-button-group">
+        <form method="post" action="{% url 'attendance-time-in' %}">
+          {% csrf_token %}
+          <button class="primary-button" type="submit" {% if not can_time_in %}disabled{% endif %}>Time In</button>
+        </form>
+        <form method="post" action="{% url 'attendance-time-out' %}">
+          {% csrf_token %}
+          <button class="secondary-button" type="submit" {% if not can_time_out %}disabled{% endif %}>Time Out</button>
+        </form>
+      </div>
+      {% if not can_time_in and not current_record.clock_in_at %}<p role="status">Time In opens at {{ settings.attendance_time_in_open_time|time:"g:i A" }}</p>{% endif %}
+      {% if can_time_out %}
+        <p id="time-out-countdown" data-expected-time-out="{{ expected_time_out|date:'c' }}" aria-live="polite"></p>
+      {% elif current_record and current_record.time_out_status == "no_time_out" %}
+        <p>No Time Out</p>
+      {% elif current_record and current_record.clock_out_at %}
+        <p>Timed out at {{ current_record.clock_out_at|date:"g:i A" }} · {{ current_record.attendance_status }}</p>
+        {% if current_record.time_out_status == "on_time" and current_record.clock_out_at > expected_time_out %}<p id="recorded-overtime" data-expected-time-out="{{ expected_time_out|date:'c' }}" data-clock-out="{{ current_record.clock_out_at|date:'c' }}"></p>{% endif %}
+      {% endif %}
+    </div>
+  {% endif %}
+
+  {% if today_rows %}
+    <div class="surface overflow-x-auto">
+      <div class="page-heading compact-heading"><div><p class="eyebrow">Today</p><h2>Team attendance</h2></div></div>
+      <table class="data-table">
+        <thead><tr><th>Employee</th><th>Time In</th><th>Time Out</th><th>Time In Status</th><th>Time Out Status</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for row in today_rows %}
+            <tr>
+              <td><strong>{{ row.employee.name }}</strong><small>{{ row.employee.employee_code }}</small></td>
+              <td>{% if row.record and row.record.clock_in_at %}{{ row.record.clock_in_at|date:"g:i A" }}{% else %}—{% endif %}</td>
+              <td>{% if row.record and row.record.clock_out_at and row.record.time_out_status != "no_time_out" %}{{ row.record.clock_out_at|date:"g:i A" }}{% else %}—{% endif %}</td>
+              <td>{{ row.time_in_status }}</td>
+              <td>{{ row.time_out_status }}</td>
+              <td>{{ row.status }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6">No active employees on today's roster.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+
+  {% if can_correct %}
+    <div class="surface mt-6 overflow-x-auto">
+      <div class="page-heading compact-heading">
+        <div><p class="eyebrow">Manual correction</p><h2>Attendance corrections</h2></div>
+      </div>
+      <table class="data-table">
+        <thead><tr><th>Employee</th><th>Date</th><th>Current status</th><th>Action</th></tr></thead>
+        <tbody>
+          {% for record in records %}
+            <tr>
+              <td><strong>{{ record.employee.name }}</strong><small>{{ record.employee.employee_code }}</small></td>
+              <td>{{ record.work_date|date:"M j, Y" }}</td>
+              <td>{{ record.attendance_status }}</td>
+              <td><a class="secondary-button" href="{% url 'attendance-correct' record.pk %}">Correct</a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4">No attendance records available for correction.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+
+  <div class="surface mt-6 overflow-x-auto">
+    <div class="page-heading compact-heading"><div><p class="eyebrow">{{ today|date:"F Y" }}</p><h2>Monthly attendance</h2></div></div>
+    <table class="data-table">
+      <thead>
+        <tr>{% if not is_employee %}<th>Employee</th>{% endif %}<th>Date</th><th>Time In</th><th>Time Out</th><th>Hours</th><th>Status</th><th>Points</th></tr>
+      </thead>
+      <tbody>
+        {% for record in records %}
+          <tr>
+            {% if not is_employee %}<td><strong>{{ record.employee.name }}</strong><small>{{ record.employee.employee_code }}</small></td>{% endif %}
+            <td>{{ record.work_date|date:"M j, Y" }}</td>
+            <td>{% if record.clock_in_at %}{{ record.clock_in_at|date:"g:i A" }}{% else %}—{% endif %}</td>
+            <td>{% if record.clock_out_at and record.time_out_status != "no_time_out" %}{{ record.clock_out_at|date:"g:i A" }}{% elif record.time_out_status == "no_time_out" %}No Time Out{% else %}—{% endif %}</td>
+            <td>{% if record.hours is not None %}{{ record.hours|floatformat:2 }}{% elif record.clock_in_at and not record.clock_out_at %}In progress{% else %}—{% endif %}</td>
+            <td>{{ record.attendance_status }}</td>
+            <td>{{ record.points|floatformat:2 }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="{% if is_employee %}6{% else %}7{% endif %}">No attendance records this month.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
+{% block page_scripts %}
+<script>
+  const clock = document.getElementById('attendance-clock');
+  const serverTime = new Date(clock.dataset.serverNow).getTime();
+  const loadedAt = Date.now();
+  const expectedTimeOut = document.getElementById('time-out-countdown');
+  const recordedOvertime = document.getElementById('recorded-overtime');
+  const hoursSoFar = document.getElementById('hours-so-far');
+
+  function updateAttendanceClock() {
+    const now = new Date(serverTime + (Date.now() - loadedAt));
+    clock.textContent = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit', second: '2-digit'
+    }).format(now);
+    if (expectedTimeOut) {
+      const remaining = new Date(expectedTimeOut.dataset.expectedTimeOut).getTime() - now.getTime();
+      const totalMinutes = Math.floor(Math.abs(remaining) / 60000);
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+      expectedTimeOut.textContent = remaining > 0
+        ? `Time Out in ${hours}h ${minutes}m`
+        : `Overtime ${hours}h ${minutes}m · daily points are capped`;
+    }
+    if (recordedOvertime) {
+      const overtime = new Date(recordedOvertime.dataset.clockOut).getTime()
+        - new Date(recordedOvertime.dataset.expectedTimeOut).getTime();
+      const totalMinutes = Math.floor(overtime / 60000);
+      recordedOvertime.textContent = `Overtime ${Math.floor(totalMinutes / 60)}h ${totalMinutes % 60}m · daily points are capped`;
+    }
+    if (hoursSoFar) {
+      const elapsed = now.getTime() - new Date(hoursSoFar.dataset.clockIn).getTime();
+      hoursSoFar.textContent = Math.max(0, elapsed / 3600000).toFixed(2);
+    }
+  }
+
+  updateAttendanceClock();
+  setInterval(updateAttendanceClock, 1000);
+</script>
+{% endblock %}

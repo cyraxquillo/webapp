@@ -1,0 +1,26 @@
+{% extends "api/base.html" %}
+{% block title %}Automation settings · Lexie Performance Hub{% endblock %}
+{% block page_heading %}Automation settings{% endblock %}
+{% block content %}
+  <section class="mx-auto max-w-2xl">
+    <div class="mb-6">
+      <p class="eyebrow">WORKFLOW SETTINGS</p>
+      <h2 class="mt-2 text-2xl font-semibold text-lexie-ink">Evaluation automation</h2>
+      <p class="mt-1 text-sm text-slate-500">Choose how monthly evaluation scores are recorded and when score changes are flagged.</p>
+    </div>
+    <form method="post" class="grid gap-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+      {% csrf_token %}
+      {% for field in form %}
+        <div>
+          <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-slate-700">{{ field.label }}</label>
+          {{ field }}
+          {% if field.help_text %}<p class="mt-1 text-xs text-slate-500">{{ field.help_text }}</p>{% endif %}
+          {% for error in field.errors %}<p class="mt-1 text-xs text-rose-700" role="alert">{{ error }}</p>{% endfor %}
+        </div>
+      {% endfor %}
+      <div class="flex justify-end border-t border-slate-100 pt-5">
+        <button type="submit" class="rounded-lg bg-lexie-teal px-4 py-2.5 text-sm font-semibold text-white"><i data-lucide="save"></i> Save settings</button>
+      </div>
+    </form>
+  </section>
+{% endblock %}

@@ -1,24 +1,24 @@
 {% extends "api/base.html" %}
-{% block title %}Performance · Lexie Performance Hub{% endblock %}
-{% block page_heading %}Performance{% endblock %}
+{% block title %}Performance{% endblock %}
+{% block page_heading %}Score history{% endblock %}
 {% block content %}
   <section class="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-    <div><p class="eyebrow">WORKSPACE</p><h2 class="mt-2 text-2xl font-semibold text-lexie-ink">Performance records</h2><p class="mt-1 text-sm text-slate-500">Scores are stored in the existing evaluation records, preserving your database schema.</p></div>
+    <div><p class="eyebrow">WORKSPACE</p><p class="mt-1 text-sm text-slate-500">Scores are stored in the existing evaluation records, preserving your database schema.</p></div>
     {% if can_manage %}<a href="{% url 'performance-create' %}" class="rounded-lg bg-lexie-teal px-4 py-2.5 text-sm font-semibold text-white"><i data-lucide="plus"></i> Add record</a>{% endif %}
   </section>
   <section class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-    <form method="get" class="grid gap-3 border-b border-slate-100 p-4 sm:grid-cols-2 lg:grid-cols-5">
+    <form method="get" data-auto-filter class="grid gap-3 border-b border-slate-100 p-4 sm:grid-cols-2 lg:grid-cols-5">
       {% if can_manage %}<label class="text-xs font-medium text-slate-500">Employee<select name="employee" class="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"><option value="">All employees</option>{% for employee in employees %}<option value="{{ employee.pk }}" {% if employee.pk|stringformat:"s" == selected_employee %}selected{% endif %}>{{ employee.name }}</option>{% endfor %}</select></label>{% endif %}
       <label class="text-xs font-medium text-slate-500">Department<select name="department" class="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"><option value="">All departments</option>{% for department in departments %}<option value="{{ department.pk }}" {% if department.pk|stringformat:"s" == selected_department %}selected{% endif %}>{{ department.name }}</option>{% endfor %}</select></label>
       <label class="text-xs font-medium text-slate-500">From<input type="date" name="start_date" value="{{ start_date }}" class="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"></label>
       <label class="text-xs font-medium text-slate-500">To<input type="date" name="end_date" value="{{ end_date }}" class="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"></label>
-      <div class="flex items-end"><button class="rounded-lg bg-lexie-navy px-4 py-2 text-sm text-white"><i data-lucide="sliders-horizontal"></i> Filter</button></div>
+      <div class="filter-action-group self-end"><a href="{% url 'performance-list' %}" class="filter-action-link rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600">Clear</a></div>
     </form>
     <div class="overflow-x-auto"><table class="min-w-full divide-y divide-slate-100 text-left text-sm">
-      <thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500"><tr><th class="px-5 py-3">Date</th><th class="px-5 py-3">Employee</th><th class="px-5 py-3">Department</th><th class="px-5 py-3">Overall score</th><th class="px-5 py-3">Evaluator</th></tr></thead>
+      <thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500"><tr><th class="px-5 py-3">Date</th><th class="px-5 py-3">Employee</th><th class="px-5 py-3">Department</th><th class="px-5 py-3">Overall score</th><th class="px-5 py-3">Classification</th><th class="px-5 py-3">Evaluator</th></tr></thead>
       <tbody class="divide-y divide-slate-100">
-        {% for record in records %}<tr class="hover:bg-slate-50"><td class="whitespace-nowrap px-5 py-3"><a class="font-medium text-lexie-teal hover:underline" href="{% if can_manage %}{% url 'performance-edit' record.pk %}{% else %}{% url 'evaluation-detail' record.pk %}{% endif %}">{{ record.date|date:"M j, Y" }}</a></td><td class="px-5 py-3 text-lexie-ink">{{ record.employee.name }}</td><td class="px-5 py-3 text-slate-600">{{ record.employee.department.name }}</td><td class="px-5 py-3 font-semibold text-lexie-ink">{{ record.overall_score|floatformat:1 }}</td><td class="px-5 py-3 text-slate-600">{{ record.evaluator.name }}</td></tr>
-        {% empty %}<tr><td colspan="5" class="px-5 py-12 text-center text-sm text-slate-500">No performance records match those filters.</td></tr>{% endfor %}
+        {% for record in records %}<tr class="hover:bg-slate-50"><td class="whitespace-nowrap px-5 py-3"><a class="font-medium text-lexie-teal hover:underline" href="{% if can_manage %}{% url 'performance-edit' record.pk %}{% else %}{% url 'evaluation-detail' record.pk %}{% endif %}">{{ record.date|date:"M j, Y" }}</a></td><td class="px-5 py-3 text-lexie-ink">{{ record.employee.name }}</td><td class="px-5 py-3 text-slate-600">{{ record.employee.department.name }}</td><td class="px-5 py-3 font-semibold text-lexie-ink">{% if record.overall_score != None %}{{ record.overall_score|floatformat:1 }}{% else %}Pending{% endif %}</td><td class="px-5 py-3">{% if record.employee.latest_prediction %}<span class="classification-badge {% if record.employee.latest_prediction.predicted_category|lower == 'low' %}classification-badge--low{% elif record.employee.latest_prediction.predicted_category|lower == 'average' %}classification-badge--average{% else %}classification-badge--high{% endif %}">{{ record.employee.latest_prediction.predicted_category }}</span><small class="block text-slate-500">{% widthratio record.employee.latest_prediction.confidence_score 1 100 %}% confidence</small>{% else %}—{% endif %}</td><td class="px-5 py-3 text-slate-600">{{ record.evaluator.name }}</td></tr>
+        {% empty %}<tr><td colspan="6" class="px-5 py-12 text-center text-sm text-slate-500">No performance records match those filters.</td></tr>{% endfor %}
       </tbody>
     </table></div>
   </section>

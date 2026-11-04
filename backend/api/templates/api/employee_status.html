@@ -1,0 +1,13 @@
+{% extends "api/base.html" %}
+{% block title %}Access update{% endblock %}
+{% block page_heading %}Review changes{% endblock %}
+{% block content %}
+  <section class="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+    <p class="eyebrow">EMPLOYEE STATUS</p><h2 class="mt-2 text-2xl font-semibold text-lexie-ink">{{ employee.name }}</h2><p class="mt-1 text-sm text-slate-500">Current status: <strong>{{ employee.get_status_display }}</strong></p>
+    <form method="post" class="mt-6">
+      {% csrf_token %}
+      <label for="{{ form.status.id_for_label }}" class="block text-sm font-medium text-slate-700">Status</label>{{ form.status }}
+      <div class="mt-7 flex justify-end gap-3"><a href="{% url 'employee-profile' employee.pk %}" class="rounded-lg border border-slate-200 px-4 py-2.5 text-sm text-slate-600">Cancel</a><button type="submit" class="rounded-lg bg-lexie-teal px-5 py-2.5 text-sm font-semibold text-white">Save status</button></div>
+    </form>
+  </section>
+{% endblock %}

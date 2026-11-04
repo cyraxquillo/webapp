@@ -8,3 +8,4 @@ class ApiConfig(AppConfig):
 
     def ready(self):
         import_module("api.ml.predict")
+        import_module("api.signals")

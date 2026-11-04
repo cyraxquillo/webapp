@@ -1,0 +1,44 @@
+# Python environments
+venv/
+.env
+.env.*
+!.env.example
+.venv/
+db_backup/
+backups/
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Python tooling and test output
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Django files
+staticfiles/
+media/
+django.sqlite3
+django.sqlite3-journal
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-shm
+*.db-wal
+
+# Logs and temporary files
+*.log
+*.tmp
+*.swp
+
+# Local frontend/build files (kept out of the backend repository)
+node_modules/
+dist/
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db

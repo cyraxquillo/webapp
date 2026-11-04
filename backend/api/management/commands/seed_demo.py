@@ -1,6 +1,7 @@
+import os
 from datetime import date, timedelta
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from api.models import Client, Department, Employee, Evaluation, User
@@ -21,6 +22,22 @@ class Command(BaseCommand):
 
     @transaction.atomic
     def handle(self, *args, **options):
+        demo_passwords = {
+            "admin": os.getenv("DEMO_ADMIN_PASSWORD", ""),
+            "client": os.getenv("DEMO_CLIENT_PASSWORD", ""),
+            "staff": os.getenv("DEMO_STAFF_PASSWORD", ""),
+        }
+        missing_passwords = [
+            f"DEMO_{role.upper()}_PASSWORD"
+            for role, password in demo_passwords.items()
+            if not password.strip()
+        ]
+        if missing_passwords:
+            raise CommandError(
+                "Set the following environment variables before seeding: "
+                + ", ".join(missing_passwords)
+            )
+
         admin, _ = User.objects.get_or_create(
             email="admin@lexie.ph",
             defaults={"name": "Amelia Reyes", "role": User.Role.admin},
@@ -30,7 +47,8 @@ class Command(BaseCommand):
         admin.is_active = True
         admin.is_staff = True
         admin.is_superuser = True
-        admin.set_password("Admin123!")
+        admin.set_password(demo_passwords["admin"])
+        admin.must_change_password = True
         admin.save()
         today = date.today()
 
@@ -41,8 +59,8 @@ class Command(BaseCommand):
         client_user.name = "Joanne Lim"
         client_user.role = User.Role.client
         client_user.is_active = True
-        if not client_user.password:
-            client_user.set_password("Client123!")
+        client_user.set_password(demo_passwords["client"])
+        client_user.must_change_password = True
         client_user.save()
         Client.objects.get_or_create(
             user=client_user,
@@ -66,8 +84,8 @@ class Command(BaseCommand):
             staff.name = name
             staff.role = User.Role.staff
             staff.is_active = True
-            if not staff.password:
-                staff.set_password("Staff123!")
+            staff.set_password(demo_passwords["staff"])
+            staff.must_change_password = True
             staff.save()
 
             department = Department.objects.get(name=department_name)
@@ -100,6 +118,4 @@ class Command(BaseCommand):
                     comments="Demo evaluation; replace with an actual review.",
                 )
 
-        self.stdout.write(self.style.SUCCESS(
-            "Demo data ready. Admin: admin@lexie.ph / Admin123!"
-        ))
+        self.stdout.write(self.style.SUCCESS("Demo data ready."))

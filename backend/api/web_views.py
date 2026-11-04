@@ -1,61 +1,117 @@
 from functools import wraps
+import hashlib
 import csv
 import json
 import logging
 from pathlib import Path
+import secrets
 from collections import defaultdict
 from datetime import date
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.db import IntegrityError, transaction
-from django.db.models import Count, Q
-from django.http import HttpResponse, HttpResponseForbidden
+from django.db.models import Case, Count, IntegerField, Q, Value, When
+from django.http import HttpResponse, HttpResponseForbidden, HttpResponseNotFound
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 
+from .access import (
+    MANAGEMENT_ROLES,
+    TEAM_ROLES,
+    VIEWER_ROLES,
+    can_manage_device,
+    employee_queryset_for,
+    evaluation_queryset_for,
+    is_management,
+    is_staff_user,
+    prediction_queryset_for,
+    submission_queryset_for,
+)
 from .forms import (
+    AccountEditForm,
     AccountCreateForm,
+        AutomationSettingsForm,
     CurrentPasswordChangeForm,
     DepartmentForm,
     EmployeeForm,
+    EmployeeStatusForm,
     EvaluationForm,
     NotificationPreferencesForm,
+    NotificationComposeForm,
     ProfileForm,
+    SubmissionForm,
+    SubmissionReviewForm,
 )
-from .models import Department, Employee, Evaluation, Prediction, User
+from .models import Client, Department, Employee, Evaluation, Prediction, Submission, User
+from .models import (
+    AutomationSettings,
+    Department,
+    Employee,
+    Evaluation,
+    Notification,
+    Prediction,
+    Submission,
+    TrustedDevice,
+    User,
+)
+from .automation import create_notification
+from .login_throttling import (
+    LOGIN_THROTTLE_MESSAGE,
+    clear_web_login_failures,
+    is_web_login_throttled,
+    record_web_login_failure,
+)
 
 
 logger = logging.getLogger(__name__)
 EMPLOYEE_ROLES = (User.Role.staff, User.Role.employee)
-WORKFORCE_ROLES = (User.Role.admin, User.Role.hr_manager)
-VIEWER_ROLES = (*WORKFORCE_ROLES, *EMPLOYEE_ROLES)
+WORKFORCE_ROLES = MANAGEMENT_ROLES
 CRITERIA_PATH = Path(__file__).resolve().parent / "criteria.json"
+LEGACY_DEVICE_COOKIE_NAME = "lexie_device"
+
+
+def device_cookie_name(user_id):
+    return f"lexie_device_{user_id}"
 
 
 def employee_scope(user):
-    queryset = Employee.objects.select_related("department", "user")
-    if user.role in EMPLOYEE_ROLES:
-        return queryset.filter(user=user)
-    return queryset
+    return employee_queryset_for(user)
 
 
 def evaluation_scope(user):
-    queryset = Evaluation.objects.select_related(
-        "employee", "employee__department", "evaluator"
-    )
-    if user.role in EMPLOYEE_ROLES:
-        return queryset.filter(employee__user=user)
-    return queryset
+    return evaluation_queryset_for(user)
 
 
 def prediction_scope(user):
-    queryset = Prediction.objects.select_related("employee", "employee__department")
-    if user.role in EMPLOYEE_ROLES:
-        return queryset.filter(employee__user=user)
-    return queryset
+    return prediction_queryset_for(user)
+
+
+def latest_prediction_map(user):
+    latest = {}
+    for prediction in prediction_scope(user).select_related("employee").order_by(
+        "-created_at", "-id"
+    ):
+        latest.setdefault(prediction.employee_id, prediction)
+    return latest
+
+
+def attach_latest_predictions(user, employees):
+    latest = latest_prediction_map(user)
+    for employee in employees:
+        employee.latest_prediction = latest.get(employee.pk)
+    return employees
+
+
+def department_scope(user):
+    departments = Department.objects.filter(is_active=True)
+    if not is_management(user):
+        departments = departments.filter(employees__in=employee_scope(user)).distinct()
+    return departments
 
 
 def parse_period_filters(request, queryset):
@@ -104,20 +160,260 @@ def table_rows(objects, fields, detail_name, detail_kwarg="pk"):
 
 def home(request):
     if request.user.is_authenticated:
+        if request.user.role == User.Role.client:
+            return redirect("client-portal")
         return redirect("dashboard")
     return redirect("web-login")
 
 
+@login_required
+def client_portal(request):
+    if request.user.role != User.Role.client:
+        return HttpResponseForbidden("You do not have permission to view the client portal.")
+    client = get_object_or_404(Client, user=request.user)
+    return render(request, "api/client_portal.html", {"client": client})
+
+
+def _trusted_device_label(user_agent):
+    browser = "Browser"
+    if "Edg/" in user_agent:
+        browser = "Edge"
+    elif "Chrome/" in user_agent:
+        browser = "Chrome"
+    elif "Firefox/" in user_agent:
+        browser = "Firefox"
+    elif "Safari/" in user_agent:
+        browser = "Safari"
+
+    operating_system = "Unknown device"
+    if "Windows" in user_agent:
+        operating_system = "Windows"
+    elif "Mac OS" in user_agent or "Macintosh" in user_agent:
+        operating_system = "macOS"
+    elif "Android" in user_agent:
+        operating_system = "Android"
+    elif "iPhone" in user_agent or "iPad" in user_agent:
+        operating_system = "iOS"
+    elif "Linux" in user_agent:
+        operating_system = "Linux"
+    return f"{browser} on {operating_system}"
+
+
+def _request_ip_address(request):
+    address = request.META.get("REMOTE_ADDR", "")
+    return address or None
+
+
+def _verify_trusted_device(request, user):
+    cookie_name = device_cookie_name(user.pk)
+    raw_token = request.COOKIES.get(cookie_name, "")
+    legacy_token = request.COOKIES.get(LEGACY_DEVICE_COOKIE_NAME, "")
+    cookie_missing = not raw_token
+    token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest() if raw_token else ""
+    user_agent = request.META.get("HTTP_USER_AGENT", "")[:1000]
+    ip_address = _request_ip_address(request)
+    now = timezone.now()
+    legacy_cookie_migration = False
+    with transaction.atomic():
+        locked_user = User.objects.select_for_update().get(pk=user.pk)
+        admin_approval_required = getattr(
+            settings,
+            "ADMIN_DEVICE_APPROVAL_REQUIRED",
+            False,
+        )
+        auto_approve_admin = (
+            locked_user.role == User.Role.admin and not admin_approval_required
+        )
+        device = (
+            TrustedDevice.objects.filter(user=locked_user, token_hash=token_hash).first()
+            if token_hash
+            else None
+        )
+        if device is None and cookie_missing and legacy_token:
+            legacy_hash = hashlib.sha256(legacy_token.encode("utf-8")).hexdigest()
+            device = TrustedDevice.objects.filter(
+                user=locked_user,
+                token_hash=legacy_hash,
+                status=TrustedDevice.Status.approved,
+            ).first()
+            if device is not None:
+                legacy_cookie_migration = True
+                raw_token = secrets.token_urlsafe(32)
+                token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+                while TrustedDevice.objects.filter(token_hash=token_hash).exists():
+                    raw_token = secrets.token_urlsafe(32)
+                    token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+        if device and device.status == TrustedDevice.Status.approved:
+            if auto_approve_admin:
+                device.approved_by = locked_user
+                device.approved_at = device.approved_at or now
+            device.last_used_at = now
+            device.ip_address = ip_address
+            device.user_agent = user_agent
+            update_fields = ["last_used_at", "ip_address", "user_agent"]
+            if legacy_cookie_migration:
+                device.token_hash = token_hash
+                update_fields.append("token_hash")
+            if auto_approve_admin:
+                update_fields.extend(("approved_by", "approved_at"))
+            device.save(update_fields=update_fields)
+            return True, raw_token
+
+        if device and auto_approve_admin:
+            device.status = TrustedDevice.Status.approved
+            device.approved_at = now
+            device.approved_by = locked_user
+            device.last_used_at = now
+            device.ip_address = ip_address
+            device.user_agent = user_agent
+            device.save(
+                update_fields=(
+                    "status",
+                    "approved_at",
+                    "approved_by",
+                    "last_used_at",
+                    "ip_address",
+                    "user_agent",
+                )
+            )
+            return True, raw_token
+
+        if device and device.status == TrustedDevice.Status.revoked:
+            device = None
+            raw_token = ""
+
+        new_device = device is None
+        if device is None:
+            reusable_pending = None
+            if cookie_missing:
+                reusable_pending = TrustedDevice.objects.filter(
+                    user=locked_user,
+                    status=TrustedDevice.Status.pending,
+                    user_agent=user_agent,
+                    ip_address=ip_address,
+                ).order_by("-created_at", "-pk").first()
+            raw_token = secrets.token_urlsafe(32)
+            token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+            while TrustedDevice.objects.filter(token_hash=token_hash).exists():
+                raw_token = secrets.token_urlsafe(32)
+                token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+            if reusable_pending is not None:
+                device = reusable_pending
+                device.token_hash = token_hash
+                device.last_used_at = None
+                device.save(update_fields=("token_hash", "last_used_at"))
+                new_device = False
+            else:
+                first_device = not TrustedDevice.objects.filter(user=locked_user).exists()
+                approved = first_device or auto_approve_admin
+                device = TrustedDevice(
+                    user=locked_user,
+                    token_hash=token_hash,
+                    label=_trusted_device_label(user_agent),
+                    user_agent=user_agent,
+                    ip_address=ip_address,
+                    status=TrustedDevice.Status.approved if approved else TrustedDevice.Status.pending,
+                    last_used_at=now if approved else None,
+                    approved_at=now if approved else None,
+                    approved_by=locked_user if approved else None,
+                )
+                device.save()
+
+        if new_device and (
+            device.status == TrustedDevice.Status.pending
+            or locked_user.role == User.Role.admin
+        ):
+            is_admin_device = locked_user.role == User.Role.admin
+            approver_title = (
+                "Admin signed in from a new device"
+                if is_admin_device
+                else "New device detected"
+            )
+            approver_message = (
+                f"An admin signed in from a new device ({device.label}). "
+                "Review it in Device management."
+                if is_admin_device
+                else (
+                    f"{locked_user.name} requested sign-in from {device.label}. "
+                    "Review the request in Device management."
+                )
+            )
+            if device.status == TrustedDevice.Status.pending:
+                Notification.objects.create(
+                    recipient=locked_user,
+                    category=Notification.Category.automatic,
+                    title="New device detected",
+                    message=approver_message,
+                )
+            for recipient in User.objects.filter(is_active=True).exclude(
+                pk=locked_user.pk,
+            ):
+                if can_manage_device(recipient, device):
+                    Notification.objects.create(
+                        recipient=recipient,
+                        category=Notification.Category.automatic,
+                        title=approver_title,
+                        message=approver_message,
+                    )
+        return device.status == TrustedDevice.Status.approved, raw_token
+
+
+def _device_approval_message(user):
+    if user.role in EMPLOYEE_ROLES:
+        approvers = "your team leader, management, or admin"
+    elif user.role in (User.Role.team_leader, User.Role.client):
+        approvers = "management or admin"
+    elif user.role in (User.Role.management, User.Role.hr_manager):
+        approvers = "an admin"
+    else:
+        approvers = "another admin"
+    return f"New device detected. Waiting for approval from {approvers}."
+
+
+def _set_device_cookie(response, raw_token, request, user_id):
+    response.set_cookie(
+        device_cookie_name(user_id),
+        raw_token,
+        max_age=60 * 60 * 24 * 365,
+        httponly=True,
+        secure=request.is_secure(),
+        samesite="Lax",
+    )
+    return response
+
+
 def login_view(request):
     if request.user.is_authenticated:
+        if request.user.must_change_password:
+            return redirect("settings")
+        if request.user.role == User.Role.client:
+            return redirect("client-portal")
         return redirect("dashboard")
 
     email = ""
     if request.method == "POST":
+        if is_web_login_throttled(request):
+            messages.error(request, LOGIN_THROTTLE_MESSAGE)
+            return render(request, "api/login.html", {"email": request.POST.get("email", "")})
         email = request.POST.get("email", "").strip().lower()
         password = request.POST.get("password", "")
         user = authenticate(request, email=email, password=password)
         if user is not None:
+            clear_web_login_failures(request)
+            raw_device_token = ""
+            if getattr(settings, "DEVICE_VERIFICATION_ENABLED", True):
+                device_approved, raw_device_token = _verify_trusted_device(request, user)
+                if not device_approved:
+                    messages.warning(
+                        request,
+                        _device_approval_message(user),
+                    )
+                    response = render(
+                        request,
+                        "api/login.html",
+                        {"email": email},
+                    )
+                    return _set_device_cookie(response, raw_device_token, request, user.pk)
             login(request, user)
             next_url = request.POST.get("next") or request.GET.get("next", "")
             if next_url and url_has_allowed_host_and_scheme(
@@ -125,8 +421,17 @@ def login_view(request):
                 allowed_hosts={request.get_host()},
                 require_https=request.is_secure(),
             ):
-                return redirect(next_url)
-            return redirect("dashboard")
+                response = redirect(next_url)
+            elif user.must_change_password:
+                response = redirect("/settings/?tab=security&force=1")
+            elif user.role == User.Role.client:
+                response = redirect("client-portal")
+            else:
+                response = redirect("dashboard")
+            if raw_device_token:
+                return _set_device_cookie(response, raw_device_token, request, user.pk)
+            return response
+        record_web_login_failure(request)
         messages.error(request, "Email or password was not recognized.")
 
     return render(request, "api/login.html", {"email": email})
@@ -156,12 +461,14 @@ def roles_required(*roles):
 
 @roles_required(
     User.Role.admin,
+    User.Role.management,
     User.Role.hr_manager,
+    User.Role.team_leader,
     User.Role.staff,
     User.Role.employee,
 )
 def dashboard(request):
-    if request.user.role in {User.Role.staff, User.Role.employee}:
+    if is_staff_user(request.user):
         employee = (
             Employee.objects.select_related("department")
             .filter(user=request.user)
@@ -174,6 +481,7 @@ def dashboard(request):
         )
         latest_evaluation = evaluations.first()
         predictions = Prediction.objects.filter(employee=employee) if employee else Prediction.objects.none()
+        latest_prediction = predictions.order_by("-created_at", "-id").first()
         employee_trend = defaultdict(list)
         for evaluation in evaluations:
             employee_trend[evaluation.date.strftime("%Y-%m")].append(evaluation.overall_score)
@@ -191,19 +499,21 @@ def dashboard(request):
                 "evaluation_count": evaluations.count(),
                 "latest_evaluation": latest_evaluation,
                 "prediction_count": predictions.count(),
+                                "latest_prediction": latest_prediction,
                 "trend_labels": trend_labels,
                 "trend_values": trend_values,
             },
         )
 
     active_employees = list(
-        Employee.objects.filter(status="active")
-        .select_related("department")
-        .order_by("name")
+        employee_scope(request.user).filter(status="active").order_by("name")
     )
-    department_count = Department.objects.filter(is_active=True).count()
+    attach_latest_predictions(request.user, active_employees)
+    department_count = department_scope(request.user).count()
     all_evaluations = list(
-        Evaluation.objects.select_related("employee", "employee__department", "evaluator")
+        evaluation_scope(request.user)
+        .filter(status=Evaluation.Status.completed)
+        .exclude(productivity_score__isnull=True)
         .order_by("-date", "-id")
     )
     latest_by_employee = {}
@@ -245,7 +555,7 @@ def dashboard(request):
         for month in trend_labels
     ]
     evaluation_count = len(all_evaluations)
-    prediction_count = Prediction.objects.count()
+    prediction_count = prediction_scope(request.user).count()
     return render(
         request,
         "api/dashboard.html",
@@ -262,13 +572,20 @@ def dashboard(request):
             "recent_evaluations": all_evaluations[:5],
             "department_labels": department_labels,
             "department_averages": department_averages,
+            "is_team_leader": request.user.role == User.Role.team_leader,
             "trend_labels": trend_labels,
             "trend_values": trend_values,
+            "pending_evaluations": Evaluation.objects.filter(
+                assigned_to=request.user,
+                status=Evaluation.Status.pending,
+            ).select_related("employee", "employee__department").order_by("date", "employee__name")
+            if request.user.role == User.Role.team_leader
+            else [],
         },
     )
 
 
-@roles_required(*WORKFORCE_ROLES)
+@roles_required(*MANAGEMENT_ROLES)
 def department_list(request):
     departments = Department.objects.annotate(employee_count=Count("employees"))
     search = request.GET.get("q", "").strip()
@@ -306,7 +623,7 @@ def department_list(request):
     )
 
 
-@roles_required(*WORKFORCE_ROLES)
+@roles_required(*MANAGEMENT_ROLES)
 def department_create(request):
     form = DepartmentForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
@@ -315,6 +632,8 @@ def department_create(request):
         except IntegrityError:
             form.add_error("name", "A department with this name already exists.")
         else:
+            if form.department_warning:
+                messages.warning(request, form.department_warning)
             messages.success(request, "Department created.")
             return redirect("department-list")
     return render(
@@ -324,7 +643,7 @@ def department_create(request):
     )
 
 
-@roles_required(*WORKFORCE_ROLES)
+@roles_required(*MANAGEMENT_ROLES)
 def department_edit(request, pk):
     department = get_object_or_404(Department, pk=pk)
     form = DepartmentForm(request.POST or None, instance=department)
@@ -334,6 +653,8 @@ def department_edit(request, pk):
         except IntegrityError:
             form.add_error("name", "A department with this name already exists.")
         else:
+            if form.department_warning:
+                messages.warning(request, form.department_warning)
             messages.success(request, "Department updated.")
             return redirect("department-list")
     return render(
@@ -343,7 +664,7 @@ def department_edit(request, pk):
     )
 
 
-@roles_required(*WORKFORCE_ROLES)
+@roles_required(*MANAGEMENT_ROLES)
 def department_delete(request, pk):
     department = get_object_or_404(Department, pk=pk)
     if request.method == "POST":
@@ -374,7 +695,7 @@ def department_delete(request, pk):
 def employee_list(request):
     if request.user.role not in VIEWER_ROLES:
         return HttpResponseForbidden("You do not have permission to view employees.")
-    employees = employee_scope(request.user)
+    employees = employee_scope(request.user).select_related("department", "team_leader")
     search = request.GET.get("q", "").strip()
     department_id = request.GET.get("department", "").strip()
     status_filter = request.GET.get("status", "").strip()
@@ -388,22 +709,27 @@ def employee_list(request):
         employees = employees.filter(department_id=int(department_id))
     if status_filter in {"active", "inactive"}:
         employees = employees.filter(status=status_filter)
-    can_manage = request.user.role in WORKFORCE_ROLES
+    employees = list(employees.order_by("name"))
+    attach_latest_predictions(request.user, employees)
+    rows = table_rows(
+        employees,
+        ("employee_code", "name", "department", "position", "status"),
+        "employee-profile",
+    )
+    for row, employee in zip(rows, employees):
+        row["employee"] = employee
+    can_manage = is_management(request.user)
     return render(
         request,
         "api/list.html",
         {
-            "title": "Employees" if can_manage else "My profile",
+            "title": "Employees" if can_manage else "My team" if request.user.role == User.Role.team_leader else "My profile",
             "description": "Search and manage employee profiles."
             if can_manage
             else "Your employee profile.",
             "columns": ("employee_code", "name", "department", "position", "status"),
             "headers": ("Employee ID", "Employee", "Department", "Position", "Status"),
-            "rows": table_rows(
-                employees,
-                ("employee_code", "name", "department", "position", "status"),
-                "employee-profile",
-            ),
+            "rows": rows,
             "column_labels": {
                 "employee_code": "Employee ID",
                 "name": "Employee",
@@ -414,14 +740,26 @@ def employee_list(request):
             "search": search,
             "department_filter": department_id,
             "status_filter": status_filter,
-            "departments": Department.objects.filter(is_active=True),
+            "departments": department_scope(request.user),
             "create_url": "employee-create" if can_manage else "",
             "empty_message": "No employee profiles match your filters.",
         },
     )
 
 
-@roles_required(*WORKFORCE_ROLES)
+@roles_required(User.Role.team_leader)
+def my_team(request):
+    employees = list(employee_scope(request.user).order_by("name"))
+    attach_latest_predictions(request.user, employees)
+    latest_by_employee = {}
+    for evaluation in evaluation_scope(request.user).order_by("-date", "-id"):
+        latest_by_employee.setdefault(evaluation.employee_id, evaluation)
+    for employee in employees:
+        employee.latest_evaluation = latest_by_employee.get(employee.pk)
+    return render(request, "api/my_team.html", {"employees": employees})
+
+
+@roles_required(*MANAGEMENT_ROLES)
 def employee_create(request):
     form = EmployeeForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
@@ -431,6 +769,8 @@ def employee_create(request):
         except IntegrityError:
             form.add_error("employee_code", "That employee ID is already in use.")
         else:
+            if form.department_warning:
+                messages.warning(request, form.department_warning)
             messages.success(request, "Employee created.")
             return redirect("employee-list")
     return render(
@@ -440,27 +780,45 @@ def employee_create(request):
     )
 
 
-@roles_required(*WORKFORCE_ROLES)
+@roles_required(*TEAM_ROLES)
 def employee_edit(request, pk):
-    employee = get_object_or_404(Employee.objects.select_related("department"), pk=pk)
-    form = EmployeeForm(request.POST or None, instance=employee)
+    employee = get_object_or_404(employee_scope(request.user), pk=pk)
+    form = EmployeeForm(request.POST or None, instance=employee, actor=request.user)
     if request.method == "POST" and form.is_valid():
         try:
             form.save()
         except IntegrityError:
             form.add_error("employee_code", "The employee ID or linked account is already in use.")
         else:
+            if form.department_warning:
+                messages.warning(request, form.department_warning)
             messages.success(request, "Employee profile updated.")
             return redirect("employee-profile", pk=employee.pk)
     return render(
         request,
-        "api/form.html",
+        "api/employee_edit.html",
         {
             "title": f"Edit {employee.name}",
             "form": form,
+            "employee": employee,
             "cancel_url": "employee-profile",
             "cancel_pk": employee.pk,
         },
+    )
+
+
+@roles_required(*MANAGEMENT_ROLES)
+def employee_status(request, pk):
+    employee = get_object_or_404(employee_scope(request.user), pk=pk)
+    form = EmployeeStatusForm(request.POST or None, instance=employee)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, f"Employee status changed to {employee.get_status_display()}.")
+        return redirect("employee-profile", pk=employee.pk)
+    return render(
+        request,
+        "api/employee_status.html",
+        {"form": form, "employee": employee},
     )
 
 
@@ -471,6 +829,7 @@ def employee_profile(request, pk):
         return HttpResponseForbidden("You do not have permission to view this profile.")
     evaluations = evaluation_scope(request.user).filter(employee=employee)
     predictions = prediction_scope(request.user).filter(employee=employee)
+    employee.latest_prediction = predictions.order_by("-created_at", "-id").first()
     return render(
         request,
         "api/employee_profile.html",
@@ -478,12 +837,89 @@ def employee_profile(request, pk):
             "employee": employee,
             "evaluations": evaluations[:10],
             "predictions": predictions[:5],
-            "can_manage": request.user.role in WORKFORCE_ROLES,
+            "can_manage": request.user.role in TEAM_ROLES,
+            "can_delete": is_management(request.user),
         },
     )
 
 
-@roles_required(*WORKFORCE_ROLES)
+@login_required
+def submission_list(request):
+    if request.user.role not in VIEWER_ROLES:
+        return HttpResponseForbidden("You do not have permission to view submissions.")
+    submissions = submission_queryset_for(request.user)
+    return render(
+        request,
+        "api/submission_list.html",
+        {
+            "submissions": submissions,
+            "can_review": request.user.role in TEAM_ROLES,
+        },
+    )
+
+
+@login_required
+def submission_create(request):
+    if not is_staff_user(request.user):
+        messages.error(request, "Only employees can upload work submissions.")
+        return redirect("submission-list")
+    employee = get_object_or_404(Employee, user=request.user)
+    form = SubmissionForm(request.POST or None, request.FILES or None)
+    if request.method == "POST" and form.is_valid():
+        submission = form.save(commit=False)
+        submission.employee = employee
+        submission.save()
+        messages.success(request, "Work submission uploaded.")
+        return redirect("submission-list")
+    return render(
+        request,
+        "api/submission_form.html",
+        {
+            "title": "Upload Work",
+            "form": form,
+            "cancel_url": "submission-list",
+        },
+    )
+
+
+@roles_required(*TEAM_ROLES)
+def submission_review(request, pk):
+    submission = get_object_or_404(submission_queryset_for(request.user), pk=pk)
+    if (
+        request.method == "GET"
+        and request.user.role == User.Role.team_leader
+        and submission.status == Submission.Status.pending
+    ):
+        submission.status = Submission.Status.under_review
+        submission.save(update_fields=("status",))
+    if request.method == "POST":
+        review_form = SubmissionReviewForm(request.POST)
+        if review_form.is_valid():
+            submission.status = review_form.cleaned_data["status"]
+            submission.reviewer_comment = review_form.cleaned_data["reviewer_comment"]
+            submission.save(update_fields=("status", "reviewer_comment"))
+            messages.success(request, "Submission review saved.")
+            return redirect("submission-list")
+    else:
+        review_form = SubmissionReviewForm(
+            initial={
+                "status": submission.status,
+                "reviewer_comment": submission.reviewer_comment,
+            }
+        )
+    return render(
+        request,
+        "api/submission_review.html",
+        {
+            "title": f"Review {submission.title}",
+            "submission": submission,
+            "form": review_form,
+            "cancel_url": "submission-list",
+        },
+    )
+
+
+@roles_required(*MANAGEMENT_ROLES)
 def employee_delete(request, pk):
     employee = get_object_or_404(Employee, pk=pk)
     if request.method == "POST":
@@ -537,24 +973,25 @@ def performance_list(request):
     if department_id.isdigit():
         records = records.filter(employee__department_id=int(department_id))
     records = parse_period_filters(request, records)
-    records = records.order_by("-date", "-id")
+    records = list(records.order_by("-date", "-id"))
+    attach_latest_predictions(request.user, [record.employee for record in records])
     return render(
         request,
         "api/performance_list.html",
         {
             "records": records,
             "employees": employee_scope(request.user).order_by("name"),
-            "departments": Department.objects.filter(is_active=True),
+            "departments": department_scope(request.user),
             "selected_employee": employee_id,
             "selected_department": department_id,
             "start_date": request.GET.get("start_date", ""),
             "end_date": request.GET.get("end_date", ""),
-            "can_manage": request.user.role in WORKFORCE_ROLES,
+            "can_manage": request.user.role in TEAM_ROLES,
         },
     )
 
 
-@roles_required(*WORKFORCE_ROLES)
+@roles_required(*TEAM_ROLES)
 def performance_create(request):
     form = EvaluationForm(request.POST or None, actor=request.user)
     try:
@@ -580,13 +1017,14 @@ def performance_create(request):
     )
 
 
-@roles_required(*WORKFORCE_ROLES)
+@roles_required(*TEAM_ROLES)
 def performance_edit(request, pk):
-    record = get_object_or_404(Evaluation.objects.select_related("employee"), pk=pk)
+    record = get_object_or_404(evaluation_scope(request.user), pk=pk)
     form = EvaluationForm(
         request.POST or None,
         instance=record,
         actor=record.evaluator,
+        scope_user=request.user,
     )
     try:
         criteria = get_evaluation_criteria()
@@ -618,7 +1056,8 @@ def evaluation_list(request):
     employee_id = request.GET.get("employee", "").strip()
     if employee_id.isdigit():
         evaluations = evaluations.filter(employee_id=int(employee_id))
-    evaluations = parse_period_filters(request, evaluations).order_by("-date", "-id")
+    evaluations = list(parse_period_filters(request, evaluations).order_by("-date", "-id"))
+    attach_latest_predictions(request.user, [evaluation.employee for evaluation in evaluations])
     try:
         criteria = get_evaluation_criteria()
     except (OSError, json.JSONDecodeError, ValueError):
@@ -634,14 +1073,14 @@ def evaluation_list(request):
             "selected_employee": employee_id,
             "start_date": request.GET.get("start_date", ""),
             "end_date": request.GET.get("end_date", ""),
-            "can_manage": request.user.role in WORKFORCE_ROLES,
-            "can_manage_criteria": request.user.role == User.Role.admin,
+            "can_manage": request.user.role in TEAM_ROLES,
+            "can_manage_criteria": is_management(request.user),
             "criteria": criteria,
         },
     )
 
 
-@roles_required(*WORKFORCE_ROLES)
+@roles_required(*TEAM_ROLES)
 def evaluation_create(request):
     form = EvaluationForm(request.POST or None, actor=request.user)
     try:
@@ -686,15 +1125,27 @@ def evaluation_detail(request, pk):
                 (label, getattr(evaluation, field_name))
                 for field_name, label in criteria.items()
             ],
-            "can_manage": request.user.role in WORKFORCE_ROLES,
+            "can_manage": request.user.role in TEAM_ROLES,
+            "can_delete": is_management(request.user),
         },
     )
 
 
-@roles_required(*WORKFORCE_ROLES)
+@roles_required(*TEAM_ROLES)
 def evaluation_edit(request, pk):
-    evaluation = get_object_or_404(Evaluation.objects.select_related("employee"), pk=pk)
-    form = EvaluationForm(request.POST or None, instance=evaluation, actor=evaluation.evaluator)
+    evaluation = get_object_or_404(evaluation_scope(request.user), pk=pk)
+    if (
+        evaluation.status == Evaluation.Status.pending
+        and not is_management(request.user)
+        and evaluation.assigned_to_id != request.user.pk
+    ):
+        return HttpResponseForbidden("Only the assigned Team Leader can complete this evaluation.")
+    form = EvaluationForm(
+        request.POST or None,
+        instance=evaluation,
+        actor=evaluation.evaluator,
+        scope_user=request.user,
+    )
     try:
         criteria = get_evaluation_criteria()
     except (OSError, json.JSONDecodeError, ValueError):
@@ -719,9 +1170,9 @@ def evaluation_edit(request, pk):
     )
 
 
-@roles_required(*WORKFORCE_ROLES)
+@roles_required(*MANAGEMENT_ROLES)
 def evaluation_delete(request, pk):
-    evaluation = get_object_or_404(Evaluation.objects.select_related("employee"), pk=pk)
+    evaluation = get_object_or_404(evaluation_scope(request.user), pk=pk)
     if request.method == "POST":
         evaluation.delete()
         messages.success(request, "Evaluation and corresponding performance record deleted.")
@@ -740,7 +1191,7 @@ def evaluation_delete(request, pk):
     )
 
 
-@roles_required(User.Role.admin)
+@roles_required(*MANAGEMENT_ROLES)
 def criteria_manage(request):
     try:
         criteria = get_evaluation_criteria()
@@ -774,13 +1225,17 @@ def criteria_manage(request):
 
 
 def run_prediction_for_employee(employee):
-    from .ml.predict import ModelUnavailableError, predict_performance
+    from .automation import classify_evaluation
 
-    evaluation = employee.evaluations.order_by("-date", "-id").first()
+    evaluation = employee.evaluations.filter(
+        status=Evaluation.Status.completed,
+    ).exclude(productivity_score__isnull=True).order_by("-date", "-id").first()
     if evaluation is None:
         raise ValueError(f"{employee.name} has no evaluation to predict from.")
-    result = predict_performance(employee, evaluation)
-    return Prediction.objects.create(employee=employee, **result)
+    prediction = classify_evaluation(evaluation)
+    if prediction is None:
+        raise ValueError(f"A classification could not be created for {employee.name}.")
+    return prediction
 
 
 @login_required
@@ -791,30 +1246,52 @@ def prediction_list(request):
     employee_id = request.GET.get("employee", "").strip()
     if employee_id.isdigit():
         predictions = predictions.filter(employee_id=int(employee_id))
-    predictions = predictions.order_by("-created_at", "-id")
-    importance = predictions.first().feature_importances if predictions.exists() else {}
+    latest_predictions = []
+    seen_evaluations = set()
+    for prediction in predictions.select_related(
+        "employee",
+        "employee__department",
+        "evaluation",
+    ).order_by("evaluation_id", "-created_at", "-id"):
+        if prediction.evaluation_id is None:
+            latest_predictions.append(prediction)
+        elif prediction.evaluation_id not in seen_evaluations:
+            latest_predictions.append(prediction)
+            seen_evaluations.add(prediction.evaluation_id)
+    latest_predictions.sort(
+        key=lambda prediction: (prediction.created_at, prediction.pk),
+        reverse=True,
+    )
+    employees = list(employee_scope(request.user).select_related("department").order_by("name"))
+    if employee_id.isdigit():
+        employees = [employee for employee in employees if employee.pk == int(employee_id)]
     return render(
         request,
         "api/prediction_list.html",
         {
-            "predictions": predictions[:100],
-            "employees": employee_scope(request.user).order_by("name"),
+            "employees": employees,
+            "employee_options": employee_scope(request.user).order_by("name"),
             "selected_employee": employee_id,
-            "can_predict": request.user.role in WORKFORCE_ROLES,
-            "importance": sorted(importance.items(), key=lambda item: item[1], reverse=True),
+            "can_predict": is_management(request.user),
+            "predictions": latest_predictions,
+            "importance": sorted(
+                latest_predictions[0].feature_importances.items(),
+                key=lambda item: item[1],
+                reverse=True,
+            ) if latest_predictions else [],
         },
     )
 
 
-@roles_required(*WORKFORCE_ROLES)
+@roles_required(*MANAGEMENT_ROLES)
 def prediction_run(request):
     if request.method != "POST":
         return HttpResponseForbidden("Predictions must be submitted using POST.")
-    from .ml.predict import ModelUnavailableError
+    from .ml.predict import ModelUnavailableError, UnknownDepartmentError
 
     action = request.POST.get("action", "single")
     if action == "batch":
-        employees = Employee.objects.filter(status="active").select_related("department").order_by("name")
+        employees = employee_scope(request.user).filter(status="active").order_by("name")
         created = 0
         failures = []
         try:
@@ -828,6 +1305,14 @@ def prediction_run(request):
         for employee in employees:
             try:
                 run_prediction_for_employee(employee)
+            except UnknownDepartmentError as error:
+                logger.warning(
+                    "Skipping prediction for employee %s (%s): %s",
+                    employee.pk,
+                    employee.name,
+                    error,
+                )
+                failures.append(str(error))
             except ValueError as error:
                 failures.append(str(error))
             else:
@@ -844,9 +1329,23 @@ def prediction_run(request):
         return redirect("prediction-list")
 
     employee_id = request.POST.get("employee_id", "").strip()
-    employee = get_object_or_404(Employee.objects.select_related("department"), pk=employee_id)
+    if not employee_id.isdigit():
+        messages.error(request, "Select an employee for an individual prediction.")
+        return redirect("prediction-list")
+    employee = employee_scope(request.user).filter(pk=int(employee_id)).first()
+    if employee is None:
+        messages.error(request, "The selected employee is not available for prediction.")
+        return redirect("prediction-list")
     try:
         prediction = run_prediction_for_employee(employee)
+    except UnknownDepartmentError as error:
+        logger.warning(
+            "Unable to predict employee %s (%s): %s",
+            employee.pk,
+            employee.name,
+            error,
+        )
+        messages.error(request, str(error))
     except (ModelUnavailableError, ValueError) as error:
         if isinstance(error, ModelUnavailableError):
             logger.exception("Prediction model is unavailable")
@@ -861,16 +1360,30 @@ def prediction_run(request):
 
 
 def filtered_report_evaluations(request):
-    evaluations = Evaluation.objects.select_related(
-        "employee", "employee__department", "evaluator"
-    ).order_by("date", "employee__name")
+    evaluations = evaluation_scope(request.user).order_by("date", "employee__name")
     department_id = request.GET.get("department", "").strip()
     if department_id.isdigit():
         evaluations = evaluations.filter(employee__department_id=int(department_id))
     return parse_period_filters(request, evaluations)
 
 
-@roles_required(*WORKFORCE_ROLES)
+def report_export_filename(extension):
+    return f"lexie-performance-report-{date.today().strftime('%Y-%m-%d')}.{extension}"
+
+
+def report_filter_label(request):
+    department_id = request.GET.get("department", "").strip()
+    department_name = "All departments"
+    if department_id.isdigit():
+        department = Department.objects.filter(pk=int(department_id)).first()
+        if department:
+            department_name = department.name
+    start_date = request.GET.get("start_date", "").strip() or "Any"
+    end_date = request.GET.get("end_date", "").strip() or "Any"
+    return department_name, start_date, end_date
+
+
+@roles_required(*TEAM_ROLES)
 def report_view(request):
     evaluations = filtered_report_evaluations(request)
     rows = [
@@ -892,7 +1405,7 @@ def report_view(request):
         "api/reports.html",
         {
             "rows": rows,
-            "departments": Department.objects.filter(is_active=True),
+            "departments": department_scope(request.user),
             "selected_department": request.GET.get("department", ""),
             "start_date": request.GET.get("start_date", ""),
             "end_date": request.GET.get("end_date", ""),
@@ -902,10 +1415,12 @@ def report_view(request):
     )
 
 
-@roles_required(*WORKFORCE_ROLES)
+@roles_required(*TEAM_ROLES)
 def report_csv(request):
     response = HttpResponse(content_type="text/csv; charset=utf-8")
-    response["Content-Disposition"] = 'attachment; filename="lexie-performance-report.csv"'
+    response["Content-Disposition"] = (
+        f'attachment; filename="{report_export_filename("csv")}"'
+    )
     response.write("\ufeff")
     writer = csv.writer(response)
     writer.writerow(
@@ -972,13 +1487,15 @@ def build_pdf(lines):
     return bytes(output)
 
 
-@roles_required(*WORKFORCE_ROLES)
+@roles_required(*TEAM_ROLES)
 def report_pdf(request):
     evaluations = filtered_report_evaluations(request)
+    department_name, start_date, end_date = report_filter_label(request)
     lines = [
         "Lexie Performance Report",
-        f"Department: {request.GET.get('department', 'All')}",
-        f"Period: {request.GET.get('start_date', 'Any')} to {request.GET.get('end_date', 'Any')}",
+        f"Generated: {date.today().isoformat()}",
+        f"Department: {department_name}",
+        f"Period: {start_date} to {end_date}",
         "",
         "Employee ID | Employee | Department | Date | Score | Evaluator",
         "-" * 85,
@@ -990,23 +1507,74 @@ def report_pdf(request):
             f"{item.overall_score:.2f} | {item.evaluator.name}"
         )
     response = HttpResponse(build_pdf(lines), content_type="application/pdf")
-    response["Content-Disposition"] = 'attachment; filename="lexie-performance-report.pdf"'
+    response["Content-Disposition"] = (
+        f'attachment; filename="{report_export_filename("pdf")}"'
+    )
     return response
 
 
 @roles_required(User.Role.admin)
-def account_list(request):
-    users = User.objects.exclude(role=User.Role.client).select_related("employee").order_by("name")
+def system_tools(request):
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "sync_predictions":
+            try:
+                from .ml.predict import ModelUnavailableError, loaded_model_artifacts
+
+                loaded_model_artifacts()
+            except ModelUnavailableError as exc:
+                messages.error(request, str(exc))
+            else:
+                messages.success(request, "Prediction model cache refreshed.")
+            return redirect("system-tools")
+        if action == "reset_demo_data":
+            messages.info(request, "Demo data reset is available through the admin maintenance workflow.")
+            return redirect("system-tools")
+    users = User.objects.exclude(role=User.Role.client).count()
+    employees = Employee.objects.count()
+    submissions = Submission.objects.count()
+    predictions = Prediction.objects.count()
     return render(
         request,
-        "api/account_list.html",
-        {"users": users, "accounts": User.objects.exclude(role=User.Role.client).count()},
+        "api/system_tools.html",
+        {
+            "user_count": users,
+            "employee_count": employees,
+            "submission_count": submissions,
+            "prediction_count": predictions,
+            "admin_label": request.user.get_role_display(),
+        },
     )
 
 
 @roles_required(User.Role.admin)
+def activity_log(request):
+    recent_users = User.objects.exclude(role=User.Role.client).order_by("-created_at")[:10]
+    return render(
+        request,
+        "api/activity_log.html",
+        {"recent_users": recent_users},
+    )
+
+
+@roles_required(User.Role.admin, User.Role.management)
+def account_list(request):
+    queryset = User.objects.exclude(role=User.Role.client)
+    if request.user.role == User.Role.management:
+        queryset = queryset.exclude(role__in=[User.Role.admin, User.Role.management, User.Role.hr_manager])
+    users = queryset.prefetch_related(
+        "employee", "employee__team_leader"
+    ).order_by("name")
+    return render(
+        request,
+        "api/account_list.html",
+        {"users": users, "accounts": queryset.count()},
+    )
+
+
+@roles_required(User.Role.admin, User.Role.management)
 def account_create(request):
-    form = AccountCreateForm(request.POST or None)
+    form = AccountCreateForm(request.POST or None, actor=request.user)
     if request.method == "POST" and form.is_valid():
         try:
             with transaction.atomic():
@@ -1023,12 +1591,41 @@ def account_create(request):
     )
 
 
+@roles_required(User.Role.admin, User.Role.management)
+def account_edit(request, pk):
+    queryset = User.objects.exclude(role=User.Role.client)
+    if request.user.role == User.Role.management:
+        queryset = queryset.exclude(role__in=[User.Role.admin, User.Role.management, User.Role.hr_manager])
+    account = get_object_or_404(queryset, pk=pk)
+    form = AccountEditForm(
+        request.POST or None,
+        request.FILES or None,
+        instance=account,
+        actor=request.user,
+    )
+    if request.method == "POST" and form.is_valid():
+        try:
+            form.save()
+        except IntegrityError:
+            form.add_error("email", "That email or employee profile is already linked.")
+        else:
+            messages.success(request, "Account updated.")
+            return redirect("account-list")
+    return render(
+        request,
+        "api/form.html",
+        {"title": f"Edit account · {account.name}", "form": form, "cancel_url": "account-list"},
+    )
+
+
 @roles_required(*VIEWER_ROLES)
 def settings_view(request):
     form_action = request.POST.get("form_action")
-    tab = request.GET.get("tab", "profile")
+    force_password_change = request.user.must_change_password
+    tab = "security" if force_password_change else request.GET.get("tab", "profile")
     profile_form = ProfileForm(
         request.POST if form_action == "profile" else None,
+        request.FILES if form_action == "profile" else None,
         instance=request.user,
     )
     password_form = CurrentPasswordChangeForm(
@@ -1040,20 +1637,38 @@ def settings_view(request):
         preferences=request.user.notification_preferences,
     )
     if request.method == "POST":
-        if form_action == "profile" and profile_form.is_valid():
+        if force_password_change and form_action != "password":
+            messages.error(request, "Change your password before continuing.")
+        elif form_action == "profile" and profile_form.is_valid():
             profile_form.save()
             messages.success(request, "Profile updated.")
             return redirect("settings")
         if form_action == "password" and password_form.is_valid():
             user = password_form.save()
+            if force_password_change:
+                user.must_change_password = False
+                user.save(update_fields=("must_change_password",))
             update_session_auth_hash(request, user)
             messages.success(request, "Password changed.")
+            if force_password_change:
+                if user.role == User.Role.client:
+                    return redirect("client-portal")
+                return redirect("dashboard")
             return redirect("settings")
-        if form_action == "notifications" and preference_form.is_valid():
+        if not force_password_change and form_action == "notifications" and preference_form.is_valid():
             request.user.notification_preferences = preference_form.cleaned_data
             request.user.save(update_fields=("notification_preferences",))
             messages.success(request, "Notification preference saved.")
             return redirect("/settings/?tab=notifications")
+    if force_password_change:
+        profile_form = ProfileForm(instance=request.user)
+        preference_form = NotificationPreferencesForm(
+            preferences=request.user.notification_preferences,
+        )
+    trusted_devices = TrustedDevice.objects.filter(user=request.user)
+    current_device_hash = _current_device_hash(request)
+    for device in trusted_devices:
+        device.is_current_device = device.token_hash == current_device_hash
     return render(
         request,
         "api/settings.html",
@@ -1062,5 +1677,190 @@ def settings_view(request):
             "password_form": password_form,
             "preference_form": preference_form,
             "active_tab": tab if tab in {"profile", "notifications", "security"} else "profile",
+            "force_password_change": force_password_change,
+            "trusted_devices": trusted_devices,
         },
     )
+
+
+def _current_device_hash(request):
+    raw_token = request.COOKIES.get(device_cookie_name(request.user.pk), "")
+    if not raw_token:
+        return None
+    return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+
+
+def _update_device_status(device, action, actor):
+    if action == "approve":
+        if device.status != TrustedDevice.Status.pending:
+            return False
+        device.status = TrustedDevice.Status.approved
+        device.approved_at = timezone.now()
+        device.approved_by = actor
+        device.save(update_fields=("status", "approved_at", "approved_by"))
+        return True
+    if action == "reject":
+        if device.status != TrustedDevice.Status.pending:
+            return False
+        device.status = TrustedDevice.Status.revoked
+        device.approved_at = None
+        device.approved_by = None
+        device.save(update_fields=("status", "approved_at", "approved_by"))
+        return True
+    if action == "remove" and device.status != TrustedDevice.Status.revoked:
+        device.status = TrustedDevice.Status.revoked
+        device.save(update_fields=("status",))
+        return True
+    return False
+
+
+@roles_required(*VIEWER_ROLES, User.Role.client)
+def own_device_action(request, pk):
+    if request.method != "POST":
+        return HttpResponseForbidden("Device actions require a POST request.")
+    device = get_object_or_404(TrustedDevice, pk=pk, user=request.user)
+    action = request.POST.get("action", "")
+    if action not in {"approve", "reject", "remove"}:
+        return HttpResponseForbidden("Invalid device action.")
+    if action == "remove" and device.token_hash == _current_device_hash(request):
+        return HttpResponseForbidden("You cannot remove the device you are currently using.")
+    if not _update_device_status(device, action, request.user):
+        messages.error(request, "That device can no longer be changed.")
+        return redirect("/settings/?tab=security")
+    messages.success(request, "Device updated.")
+    return redirect("/settings/?tab=security")
+
+
+@roles_required(User.Role.admin, User.Role.management, User.Role.team_leader)
+def trusted_device_list(request):
+    devices = TrustedDevice.objects.select_related("user", "approved_by").order_by(
+        Case(
+            When(status=TrustedDevice.Status.pending, then=Value(0)),
+            default=Value(1),
+            output_field=IntegerField(),
+        ),
+        "-created_at",
+        "-pk",
+    )
+    current_device_hash = _current_device_hash(request)
+    manageable_devices = []
+    for device in devices:
+        if not can_manage_device(request.user, device):
+            continue
+        device.is_current_device = device.token_hash == current_device_hash
+        device.can_manage = True
+        device.can_approve = (
+            device.status == TrustedDevice.Status.pending
+            and device.user_id != request.user.pk
+        )
+        device.can_reject = device.status == TrustedDevice.Status.pending
+        device.can_remove = (
+            device.status != TrustedDevice.Status.revoked
+            and not device.is_current_device
+        )
+        manageable_devices.append(device)
+    return render(
+        request,
+        "api/trusted_devices.html",
+        {"devices": manageable_devices},
+    )
+
+
+@roles_required(User.Role.admin, User.Role.management, User.Role.team_leader)
+def trusted_device_action(request, pk):
+    if request.method != "POST":
+        return HttpResponseForbidden("Device actions require a POST request.")
+    device = get_object_or_404(
+        TrustedDevice.objects.select_related("user"),
+        pk=pk,
+    )
+    if not can_manage_device(request.user, device):
+        return HttpResponseNotFound()
+    action = request.POST.get("action", "")
+    if action not in {"approve", "reject", "remove"}:
+        return HttpResponseForbidden("Invalid device action.")
+    if action == "approve" and device.user_id == request.user.pk:
+        return HttpResponseForbidden("You cannot approve your own device here.")
+    if action == "remove" and device.token_hash == _current_device_hash(request):
+        return HttpResponseForbidden("You cannot remove the device you are currently using.")
+    if not _update_device_status(device, action, request.user):
+        messages.error(request, "That device can no longer be changed.")
+    else:
+        messages.success(request, "Device updated.")
+    return redirect("trusted-device-list")
+
+
+@roles_required(*VIEWER_ROLES, User.Role.client)
+def notification_list(request):
+    notifications = Notification.objects.filter(recipient=request.user)
+    return render(
+        request,
+        "api/notifications.html",
+        {
+            "notifications": notifications,
+            "unread_count": notifications.filter(read_at__isnull=True).count(),
+        },
+    )
+
+
+@login_required
+def notification_read(request, pk):
+    if request.method != "POST" or request.user.role not in VIEWER_ROLES:
+        return HttpResponseForbidden("Notifications can only be marked read by their recipient.")
+    notification = get_object_or_404(Notification, pk=pk, recipient=request.user)
+    if notification.read_at is None:
+        notification.read_at = timezone.now()
+        notification.save(update_fields=("read_at",))
+    return redirect("notification-list")
+
+
+@roles_required(*TEAM_ROLES)
+def notification_send(request):
+    if not is_management(request.user) and request.user.role != User.Role.team_leader:
+        return HttpResponseForbidden("You do not have permission to send notifications.")
+    employee_id = request.GET.get("employee", "").strip()
+    employee = (
+        get_object_or_404(employee_scope(request.user), pk=employee_id)
+        if employee_id.isdigit()
+        else None
+    )
+    form = NotificationComposeForm(
+        request.POST or None,
+        actor=request.user,
+        employee=employee,
+    )
+    if request.method == "POST" and form.is_valid():
+        recipient = form.cleaned_data["recipient"]
+        create_notification(
+            recipient,
+            form.cleaned_data["title"],
+            form.cleaned_data["message"],
+            Notification.Category.manual,
+            sender=request.user,
+        )
+        messages.success(request, f"Notification sent to {recipient.name}.")
+        if employee is not None:
+            return redirect("employee-profile", pk=employee.pk)
+        return redirect("notification-list")
+    return render(
+        request,
+        "api/notification_form.html",
+        {
+            "form": form,
+            "employee": employee,
+            "cancel_url": "employee-profile" if employee else "notification-list",
+        },
+    )
+
+
+@roles_required(*MANAGEMENT_ROLES)
+def automation_settings(request):
+    settings_row = AutomationSettings.objects.get_or_create_default()
+    form = AutomationSettingsForm(request.POST or None, instance=settings_row)
+    if request.method == "POST" and form.is_valid():
+        settings_row = form.save(commit=False)
+        settings_row.updated_by = request.user
+        settings_row.save()
+        messages.success(request, "Automation settings updated.")
+        return redirect("automation-settings")
+    return render(request, "api/automation_settings.html", {"form": form})

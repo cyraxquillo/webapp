@@ -1,19 +1,26 @@
 {% extends "api/base.html" %}
-{% block title %}Settings · Lexie Performance Hub{% endblock %}
-{% block page_heading %}Settings{% endblock %}
+{% block title %}Settings{% endblock %}
+{% block page_heading %}Preferences{% endblock %}
 {% block content %}
   <section class="settings-heading">
     <p class="eyebrow">WORKSPACE PREFERENCES</p>
-    <h2>Settings</h2>
-    <p class="muted">Manage your profile, notifications, and account security.</p>
+    <h2>Account details</h2>
+    {% if force_password_change %}
+      <p class="muted">Change your temporary password to continue using your account.</p>
+    {% else %}
+      <p class="muted">Manage your profile, notifications, and account security.</p>
+    {% endif %}
   </section>
   <div class="settings-layout">
     <div class="settings-nav" role="tablist" aria-label="Settings">
-      <button type="button" role="tab" id="tab-profile" aria-controls="panel-profile" aria-selected="{% if active_tab == 'profile' %}true{% else %}false{% endif %}" class="{% if active_tab == 'profile' %}active{% endif %}" data-settings-tab="profile"><i data-lucide="user-round"></i> Profile</button>
-      <button type="button" role="tab" id="tab-notifications" aria-controls="panel-notifications" aria-selected="{% if active_tab == 'notifications' %}true{% else %}false{% endif %}" class="{% if active_tab == 'notifications' %}active{% endif %}" data-settings-tab="notifications"><i data-lucide="bell"></i> Notifications</button>
+      {% if not force_password_change %}
+        <button type="button" role="tab" id="tab-profile" aria-controls="panel-profile" aria-selected="{% if active_tab == 'profile' %}true{% else %}false{% endif %}" class="{% if active_tab == 'profile' %}active{% endif %}" data-settings-tab="profile"><i data-lucide="user-round"></i> Profile</button>
+        <button type="button" role="tab" id="tab-notifications" aria-controls="panel-notifications" aria-selected="{% if active_tab == 'notifications' %}true{% else %}false{% endif %}" class="{% if active_tab == 'notifications' %}active{% endif %}" data-settings-tab="notifications"><i data-lucide="bell"></i> Notifications</button>
+      {% endif %}
       <button type="button" role="tab" id="tab-security" aria-controls="panel-security" aria-selected="{% if active_tab == 'security' %}true{% else %}false{% endif %}" class="{% if active_tab == 'security' %}active{% endif %}" data-settings-tab="security"><i data-lucide="shield-check"></i> Security</button>
     </div>
     <div class="settings-tab-content">
+      {% if not force_password_change %}
       <section class="panel settings-form" role="tabpanel" id="panel-profile" aria-labelledby="tab-profile" {% if active_tab != "profile" %}hidden{% endif %}>
         <div class="section-header">
           <h3>Profile information</h3>
@@ -21,10 +28,10 @@
             {% if request.user.role == "admin" %}Admin / IT Manager{% elif request.user.role == "staff" or request.user.role == "employee" %}Staff / Employee{% elif request.user.role == "client" %}Client portal{% else %}{{ request.user.get_role_display }}{% endif %}
           </span>
         </div>
-        <form method="post" action="{% url 'settings' %}?tab=profile" class="settings-profile-form">
+        <form method="post" action="{% url 'settings' %}?tab=profile" enctype="multipart/form-data" class="settings-profile-form">
           {% csrf_token %}
           <input type="hidden" name="form_action" value="profile">
-          <div class="form-avatar"><span class="avatar avatar-xl">{{ request.user.name|slice:":1"|upper }}</span></div>
+          <div class="form-avatar">{% include "api/_avatar.html" with user=request.user size="xl" %}</div>
           <div class="form-grid">
             {% for field in profile_form %}
               <label for="{{ field.id_for_label }}">{{ field.label }}{{ field }}{% for error in field.errors %}<small class="settings-error" role="alert">{{ error }}</small>{% endfor %}</label>
@@ -57,10 +64,11 @@
           </label>
         </form>
       </section>
+      {% endif %}
 
       <section class="panel settings-form" role="tabpanel" id="panel-security" aria-labelledby="tab-security" {% if active_tab != "security" %}hidden{% endif %}>
         <div class="section-header">
-          <h3>Change password</h3>
+          <h3>{% if force_password_change %}Change your temporary password{% else %}Change password{% endif %}</h3>
           <span class="subtle-label">Password update</span>
         </div>
         <form method="post" action="{% url 'settings' %}?tab=security" class="security-form">
@@ -77,6 +85,31 @@
           <p class="muted">Use at least 8 characters.</p>
           <button type="submit" class="primary-button"><i data-lucide="key-round"></i> Update password</button>
         </form>
+        <div class="section-header mt-8">
+          <h3>Your devices</h3>
+          <span class="subtle-label">Trusted sign-ins</span>
+        </div>
+        <div class="divide-y divide-slate-100">
+          {% for device in trusted_devices %}
+            <article class="flex flex-wrap items-center justify-between gap-4 py-4">
+              <div>
+                <h4 class="font-semibold text-lexie-ink">{{ device.label }}{% if device.is_current_device %} <span class="subtle-label">This device</span>{% endif %}</h4>
+                <p class="text-sm text-slate-500">{{ device.get_status_display }} · Last used {% if device.last_used_at %}{{ device.last_used_at|date:"M j, Y H:i" }}{% else %}never{% endif %}</p>
+                <p class="text-xs text-slate-500">Added {{ device.created_at|date:"M j, Y H:i" }}{% if device.ip_address %} · {{ device.ip_address }}{% endif %}</p>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                {% if device.status == "pending" %}
+                  <form method="post" action="{% url 'own-device-action' device.pk %}">{% csrf_token %}<input type="hidden" name="action" value="approve"><button type="submit" class="rounded-lg bg-lexie-teal px-3 py-2 text-sm font-semibold text-white">Approve</button></form>
+                  <form method="post" action="{% url 'own-device-action' device.pk %}">{% csrf_token %}<input type="hidden" name="action" value="reject"><button type="submit" class="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold">Reject</button></form>
+                {% elif device.status == "approved" and not device.is_current_device %}
+                  <form method="post" action="{% url 'own-device-action' device.pk %}">{% csrf_token %}<input type="hidden" name="action" value="remove"><button type="submit" class="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold">Remove</button></form>
+                {% endif %}
+              </div>
+            </article>
+          {% empty %}
+            <p class="py-6 text-sm text-slate-500">No devices are registered yet. This device will be enrolled after your next sign-in.</p>
+          {% endfor %}
+        </div>
       </section>
     </div>
   </div>

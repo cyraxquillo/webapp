@@ -1,11 +1,11 @@
 {% extends "api/base.html" %}
-{% block title %}Evaluation · Lexie Performance Hub{% endblock %}
-{% block page_heading %}Evaluation details{% endblock %}
+{% block title %}Evaluation{% endblock %}
+{% block page_heading %}Score details{% endblock %}
 {% block content %}
   <section class="mx-auto max-w-3xl">
     <div class="mb-5 flex flex-wrap items-end justify-between gap-3">
       <div><p class="text-xs font-semibold uppercase tracking-wider text-lexie-teal">{{ evaluation.date|date:"M j, Y" }}</p><h2 class="mt-2 text-2xl font-semibold text-lexie-ink">{{ evaluation.employee.name }}</h2><p class="mt-1 text-sm text-slate-500">{{ evaluation.employee.department.name }} · Evaluated by {{ evaluation.evaluator.name }}</p></div>
-      {% if can_manage %}<div class="flex gap-2"><a href="{% url 'evaluation-edit' evaluation.pk %}" class="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600">Edit</a><a href="{% url 'evaluation-delete' evaluation.pk %}" class="rounded-lg border border-rose-200 px-3 py-2 text-sm text-rose-700">Delete</a></div>{% endif %}
+      {% if can_manage %}<div class="flex gap-2"><a href="{% url 'evaluation-edit' evaluation.pk %}" class="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600">Edit</a>{% if can_delete %}<a href="{% url 'evaluation-delete' evaluation.pk %}" class="rounded-lg border border-rose-200 px-3 py-2 text-sm text-rose-700">Delete</a>{% endif %}</div>{% endif %}
     </div>
     <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
       <div class="flex items-center justify-between border-b border-slate-100 pb-5"><h3 class="font-semibold text-lexie-ink">Evaluation scores</h3><span class="rounded-xl bg-lexie-mint px-4 py-2 text-lg font-bold text-lexie-teal">{{ evaluation.overall_score|floatformat:2 }}</span></div>
