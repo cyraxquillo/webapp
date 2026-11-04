@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { getMe, login as requestLogin } from '../services/authService'
 import { AUTH_TOKEN_KEY } from '../services/api'
 
-export const roleHome = (role) => `/${role}/overview`
+export const roleHome = (role) => `/${role}/${['management', 'hr_manager', 'team_leader'].includes(role) ? 'attendance' : 'overview'}`
 
 export const useAuthStore = create((set, get) => ({
   user: null,

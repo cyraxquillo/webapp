@@ -1,0 +1,154 @@
+:root {
+  color-scheme: light;
+  --brand-dark: #0B2E1F;
+  --brand-dark-soft: #123B2A;
+  --brand-border: #315343;
+  --brand-primary: #1FA34A;
+  --brand-button-text: #061B0E;
+  --brand-accent: #4ADE80;
+  --brand-mint: #E8F7EE;
+  --surface: #FFFFFF;
+  --canvas: #F6FAF7;
+  --ink: #10261B;
+  --muted: #475569;
+  --line: #DCE8DF;
+  --status-success: #16A34A;
+  --status-warning: #F59E0B;
+  --status-danger: #DC2626;
+  --status-info: #2563EB;
+  --status-success-text: #166534;
+  --status-warning-text: #854D0E;
+  --status-danger-text: #991B1B;
+  --status-info-text: #1E40AF;
+  --status-success-bg: #E8F7EE;
+  --status-warning-bg: #FFF7E6;
+  --status-danger-bg: #FEF2F2;
+  --status-info-bg: #EFF6FF;
+  --navy: var(--brand-dark);
+  --teal: var(--brand-primary);
+  --teal-dark: var(--brand-dark);
+  --mint: var(--brand-mint);
+  --orange: var(--status-warning);
+  scrollbar-color: #9EBEAA var(--canvas);
+}
+
+body,
+.main-area,
+.page-content { background: var(--canvas); color: var(--ink); }
+
+.sidebar { background: var(--brand-dark); color: #E8F7EE; }
+.brand-mark { background: var(--brand-accent); color: var(--brand-dark); font-weight: 800; }
+.brand-dot { color: var(--brand-accent); }
+.workspace-switcher,
+.help-card { border-color: var(--brand-border); background: var(--brand-dark-soft); }
+.workspace-switcher small,
+.help-identity small,
+.help-card p { color: #C4DCCB; }
+.workspace-icon { background: var(--brand-mint); color: var(--brand-dark); }
+.nav-item { color: #D3E5D8; }
+.nav-item:hover { color: var(--brand-dark); background: var(--brand-mint); }
+.nav-item.active { color: var(--brand-dark); background: var(--brand-accent); box-shadow: inset 3px 0 var(--brand-primary); }
+
+.topbar { background: rgba(255,255,255,.97); }
+.topbar h1,
+.content h2,
+.content h3,
+.section-header h2,
+.stat-value,
+.login-heading h2 { color: var(--brand-dark); }
+.breadcrumb,
+.subtle-label,
+.stat-head,
+.stat-detail,
+.muted { color: var(--muted); }
+.eyebrow,
+.text-button,
+.icon-button:hover,
+.content table a,
+.content table [class*="text-lexie-teal"] { color: var(--brand-dark); }
+
+.primary-button,
+.login-card .primary-button {
+  color: var(--brand-button-text);
+  border-color: var(--brand-primary);
+  background: var(--brand-primary);
+  box-shadow: 0 4px 10px color-mix(in srgb, var(--brand-primary) 18%, transparent);
+}
+.primary-button:hover,
+.login-card .primary-button:hover {
+  color: var(--brand-button-text);
+  border-color: var(--brand-accent);
+  background: var(--brand-accent);
+}
+.secondary-button:hover,
+.select-button:hover,
+.icon-button:hover { background: var(--brand-mint); }
+.stat-icon,
+.stat-icon.blue,
+.stat-icon.orange,
+.stat-icon.purple { color: var(--brand-dark); background: var(--brand-mint); }
+.positive { color: var(--status-success); }
+.negative { color: var(--status-danger); }
+.mini-bar i { background: var(--brand-primary); }
+.legend-dot.teal { background: var(--brand-primary); }
+.legend-dot.navy { background: var(--brand-dark); }
+.legend-dot.pale { background: var(--brand-accent); }
+.score-cell .mini-bar i { background: var(--status-success); }
+
+.login-page { background: var(--canvas); }
+.login-art {
+  background:
+    radial-gradient(ellipse at 82% 18%, color-mix(in srgb, var(--brand-accent) 20%, transparent), transparent 34%),
+    linear-gradient(140deg, var(--brand-dark) 0%, var(--brand-dark-soft) 58%, var(--brand-dark) 100%);
+}
+.login-art:after {
+  border-color: color-mix(in srgb, var(--brand-accent) 30%, transparent);
+  box-shadow: 0 0 0 45px color-mix(in srgb, var(--brand-primary) 8%, transparent), 0 0 0 46px color-mix(in srgb, var(--brand-accent) 24%, transparent), 0 0 0 98px color-mix(in srgb, var(--brand-primary) 6%, transparent), 0 0 0 99px color-mix(in srgb, var(--brand-accent) 18%, transparent);
+}
+.art-copy .eyebrow,
+.art-copy h1 em { color: var(--brand-accent); }
+.art-footer { color: #D3E5D8; }
+.login-panel { background: var(--canvas); }
+.login-card label,
+.settings-form label,
+.security-form label { color: var(--muted); }
+.login-card input:focus,
+.security-form input:focus,
+.settings-form input:not([readonly]):focus,
+.settings-form textarea:focus,
+.settings-form select:focus {
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-primary) 20%, transparent);
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid transparent;
+}
+.status-badge.success { color: var(--status-success-text); background: var(--status-success-bg); }
+.status-badge.warning { color: var(--status-warning-text); background: var(--status-warning-bg); }
+.status-badge.danger { color: var(--status-danger-text); background: var(--status-danger-bg); }
+.status-badge.info { color: var(--status-info-text); background: var(--status-info-bg); }
+.status-badge svg { flex: 0 0 auto; }
+.classification-badge--high { color: var(--status-success-text); background: var(--status-success-bg); }
+.classification-badge--average { color: var(--status-warning-text); background: var(--status-warning-bg); }
+.classification-badge--low { color: var(--status-danger-text); background: var(--status-danger-bg); }
+.classification-badge--other { color: var(--status-info-text); background: var(--status-info-bg); }
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid var(--brand-accent);
+  outline-offset: 2px;
+}
+.primary-button:focus-visible { outline-color: var(--brand-dark); }
+
+@media (max-width: 767px) {
+  .login-art { background:
+    radial-gradient(ellipse at 82% 18%, color-mix(in srgb, var(--brand-accent) 20%, transparent), transparent 34%),
+    linear-gradient(140deg, var(--brand-dark) 0%, var(--brand-dark-soft) 58%, var(--brand-dark) 100%); }
+}

@@ -1,0 +1,19 @@
+{
+  "hosting": {
+    "public": "hosting",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "run": {
+          "serviceId": "lexie-django",
+          "region": "asia-southeast1"
+        }
+      }
+    ]
+  }
+}

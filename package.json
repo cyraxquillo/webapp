@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "test:location": "node --test src/services/attendanceGeolocation.test.js",
     "preview": "vite preview"
   },
   "dependencies": {

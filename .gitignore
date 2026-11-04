@@ -1,13 +1,22 @@
 # Local credentials and configuration
 .env
 backend/.env
+backend/firebase-credentials/
+**/service-account*.json
+**/*serviceAccount*.json
+**/*firebase-adminsdk*.json
 
 # Python environments and generated files
 .venv/
 venv/
 backend/venv/
 backend/.venv/
+db_backup/
+backups/
+media/
+staticfiles/
 __pycache__/
+*.sqlite3
 *.py[cod]
 
 # Local databases and logs

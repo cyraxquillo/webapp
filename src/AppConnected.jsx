@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Navigate, NavLink, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { ArrowDownRight, ArrowUpRight, BarChart3, Bell, BriefcaseBusiness, CheckCircle2, ChevronDown, CircleAlert, ClipboardCheck, Clock3, Download, FileBarChart, LayoutDashboard, LockKeyhole, LogOut, Menu, MoreHorizontal, Plus, Search, Settings, ShieldCheck, Sparkles, UserRound, Users, X } from 'lucide-react'
-import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { ArrowDownRight, ArrowUpRight, BarChart3, Bell, BriefcaseBusiness, CheckCircle2, ChevronDown, CircleAlert, ClipboardCheck, Clock3, Download, FileBarChart, FolderUp, LayoutDashboard, LockKeyhole, LogOut, Menu, MoreHorizontal, Plus, Search, Settings, ShieldCheck, Sparkles, UserRound, Users, X } from 'lucide-react'
+import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { getMyClient } from './services/clientService'
 import { login as authLogin } from './services/authService'
 import { createEmployee, getEmployee, getEmployees, updateEmployee } from './services/employeeService'
@@ -9,11 +9,13 @@ import { createEvaluation, getEvaluations } from './services/evaluationService'
 import { getPredictions, runPrediction } from './services/predictionService'
 import { getPerformanceTrend, getSummary } from './services/reportService'
 import { getMe as getUserProfile, getNotificationPrefs, updateNotificationPrefs, updatePassword, updateProfile } from './services/userService'
+import { AttendancePage, NotificationBell, NotificationsPage, OfficeLocationsPage } from './AttendancePages'
+import StatusBadge from './components/StatusBadge'
 import { roleHome, useAuthStore } from './store/useAuthStore'
 import './settings.css'
 
 const cn = (...classes) => classes.filter(Boolean).join(' ')
-const roleLabels = { admin: 'Admin / IT Manager', staff: 'Staff / Employee', client: 'Client portal' }
+const roleLabels = { admin: 'Admin / IT Manager', management: 'Management', hr_manager: 'Management', team_leader: 'Team Leader', staff: 'Staff / Employee', employee: 'Staff / Employee', client: 'Client portal' }
 const rolePath = (role, path = 'overview') => `/${role}/${path}`
 const trainedDepartments = ['Recruitment', 'Client Services', 'HR & Admin', 'Finance', 'IT Support']
 
@@ -82,11 +84,10 @@ function downloadData(name, data) {
   link.click()
   URL.revokeObjectURL(url)
 }
-function Logo() { return <div className="brand"><span className="brand-mark"><Sparkles size={17} /></span><span>lexie<span className="brand-dot">.</span></span></div> }
+function Logo() { return <div className="brand" aria-label="Lexie Staffing & Business Consulting"><span className="brand-mark" aria-hidden="true">L</span><span>Lexie<span className="brand-dot">.</span></span></div> }
 function Modal({ title, children, onClose }) { return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><div className="modal" role="dialog" aria-modal="true"><div className="modal-header"><h2>{title}</h2><button className="icon-button" onClick={onClose} aria-label="Close"><X size={18} /></button></div>{children}</div></div> }
 function SectionHeader({ title, action }) { return <div className="section-header"><h2>{title}</h2>{action}</div> }
-function StatusBadge({ status }) { return <span className={cn('status-badge', status === 'High Performer' ? 'success' : status === 'At Risk' ? 'danger' : 'warning')}>{status || 'Not evaluated'}</span> }
-function StatCard({ label, value, detail, tone = 'teal', icon: Icon, trend, onClick }) { return <button className="stat-card stat-card-button" onClick={onClick}><div className="stat-head"><span>{label}</span><span className={cn('stat-icon', tone)}><Icon size={17} /></span></div><strong className="stat-value">{value}</strong><div className="stat-detail">{trend && <span className={trend.startsWith('+') ? 'positive' : 'negative'}>{trend.startsWith('+') ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}{trend}</span>}<span>{detail}</span></div></button> }
+function StatCard({ label, value, detail, tone = 'green', icon: Icon, trend, onClick }) { return <button className="stat-card stat-card-button" onClick={onClick}><div className="stat-head"><span>{label}</span><span className={cn('stat-icon', tone)}><Icon size={17} /></span></div><strong className="stat-value">{value}</strong><div className="stat-detail">{trend && <span className={trend.startsWith('+') ? 'positive' : 'negative'}>{trend.startsWith('+') ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}{trend}</span>}<span>{detail}</span></div></button> }
 function useFeedback() { const [message, setMessage] = useState(''); const feedback = (text) => { setMessage(text); setTimeout(() => setMessage(''), 2500) }; return [message, feedback] }
 
 function Login() {
@@ -94,8 +95,8 @@ function Login() {
   const loading = useAuthStore((state) => state.isLoggingIn)
   const loginError = useAuthStore((state) => state.loginError)
   const navigate = useNavigate()
-  const [email, setEmail] = useState('admin@lexie.ph')
-  const [password, setPassword] = useState('Admin123!')
+  const [email, setEmail] = useState(import.meta.env.DEV ? 'admin@lexie.ph' : '')
+  const [password, setPassword] = useState(import.meta.env.DEV ? 'Admin123!' : '')
   const submit = async (event) => {
     event.preventDefault()
     try {
@@ -105,7 +106,7 @@ function Login() {
       // The store exposes the backend's safe authentication message.
     }
   }
-  return <div className="login-page"><div className="login-art"><Logo /><div className="art-copy"><p className="eyebrow">PERFORMANCE INTELLIGENCE</p><h1>Make every<br /><em>contribution</em><br />count.</h1><p>A clearer view of people performance, built for the teams shaping what comes next.</p></div><div className="art-footer"><span>Lexie Staffing &amp; Business Consulting</span><span>© 2026</span></div></div><div className="login-panel"><div className="login-card"><div className="login-heading"><p className="eyebrow">WELCOME BACK</p><h2>Sign in to your workspace</h2><p>Use your Lexie account credentials.</p></div><form onSubmit={submit}><label>Email address<input type="email" autoComplete="username" required value={email} onChange={(event) => setEmail(event.target.value)} /></label><label>Password<div className="input-icon"><LockKeyhole size={16} /><input type="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} /></div></label>{loginError && <p className="form-error" role="alert">{loginError}</p>}<button className="primary-button full" type="submit" disabled={loading}>{loading ? 'Signing in...' : <>Enter workspace <ArrowUpRight size={16} /></>}</button></form><p className="demo-note"><CheckCircle2 size={14} /> Seeded admin account is prefilled for local testing.</p></div></div></div>
+  return <div className="login-page"><div className="login-art"><Logo /><div className="art-copy"><p className="eyebrow">PEOPLE &amp; PERFORMANCE</p><h1>Empowering<br /><em>people</em><br />to thrive.</h1><p>People-first staffing and business solutions, powered by a clearer view of performance.</p></div><div className="art-footer"><span>Lexie Staffing &amp; Business Consulting</span><span>© 2026</span></div></div><div className="login-panel"><div className="login-card"><div className="login-heading"><p className="eyebrow">WELCOME BACK</p><h2>Sign in to your workspace</h2><p>Use your Lexie account credentials.</p></div><form onSubmit={submit}><label>Email address<input type="email" autoComplete="username" required value={email} onChange={(event) => setEmail(event.target.value)} /></label><label>Password<div className="input-icon"><LockKeyhole size={16} /><input type="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} /></div></label>{loginError && <p className="form-error" role="alert">{loginError}</p>}<button className="primary-button full" type="submit" disabled={loading}>{loading ? 'Signing in...' : <>Enter workspace <ArrowUpRight size={16} /></>}</button></form>{import.meta.env.DEV && <p className="demo-note"><CheckCircle2 size={14} /> Demo admin credentials are prefilled for local development.</p>}</div></div></div>
 }
 
 function Shell({ children }) {
@@ -117,18 +118,21 @@ function Shell({ children }) {
   const nav = [
     { label: 'Overview', to: rolePath(user.role), icon: LayoutDashboard },
     ...(user.role === 'admin' ? [{ label: 'Employees', to: rolePath(user.role, 'employees'), icon: Users }] : []),
+    ...(user.role !== 'client' ? [{ label: 'Attendance', to: rolePath(user.role, 'attendance'), icon: Clock3 }] : []),
+    ...(user.role === 'admin' ? [{ label: 'Office locations', to: rolePath(user.role, 'office-locations'), icon: BriefcaseBusiness }] : []),
+    ...(user.role !== 'client' ? [{ label: 'Notifications', to: rolePath(user.role, 'notifications'), icon: Bell }] : []),
     ...(user.role !== 'client' ? [{ label: 'Evaluations', to: rolePath(user.role, 'evaluations'), icon: ClipboardCheck }, { label: 'Predictions', to: rolePath(user.role, 'predictions'), icon: BarChart3 }] : []),
     ...(user.role === 'admin' ? [{ label: 'Reports', to: rolePath(user.role, 'reports'), icon: FileBarChart }] : []),
     { label: 'Settings', to: rolePath(user.role, 'settings'), icon: Settings },
   ]
   const current = nav.find((item) => location.pathname === item.to || location.pathname.startsWith(`${item.to}/`))
   const signOut = () => { logout(); navigate('/login', { replace: true }) }
-  return <div className="app-shell"><aside className={cn('sidebar', open && 'open')}><div className="sidebar-top"><Logo /><button className="icon-button close-mobile" onClick={() => setOpen(false)} aria-label="Close navigation"><X size={19} /></button></div><div className="workspace-switcher"><span className="workspace-icon">L</span><span><strong>Lexie workspace</strong><small>{roleLabels[user.role]}</small></span><ChevronDown size={15} /></div><nav>{nav.map(({ label, to, icon: Icon }) => <NavLink key={to} to={to} onClick={() => setOpen(false)} className={({ isActive }) => cn('nav-item', isActive && 'active')}><Icon size={18} /><span>{label}</span></NavLink>)}</nav><div className="sidebar-bottom"><div className="help-card"><div className="help-icon"><Sparkles size={15} /></div><strong>{user.name}</strong><p>{user.email}</p></div><button className="nav-item logout" onClick={signOut}><LogOut size={18} /><span>Sign out</span></button></div></aside><main className="main-area"><header className="topbar"><button className="icon-button menu-button" onClick={() => setOpen(true)} aria-label="Open navigation"><Menu size={21} /></button><div><p className="breadcrumb">Workspace <span>/</span> {current?.label || 'Workspace'}</p><h1>{current?.label || 'Workspace'}</h1></div><div className="topbar-actions"><span className="subtle-label">{user.name}</span></div></header><div className="page-content">{children}</div></main></div>
+  return <div className="app-shell"><aside className={cn('sidebar', open && 'open')}><div className="sidebar-top"><Logo /><button className="icon-button close-mobile" onClick={() => setOpen(false)} aria-label="Close navigation"><X size={19} /></button></div><div className="workspace-switcher"><span className="workspace-icon">L</span><span><strong>Lexie workspace</strong><small>{roleLabels[user.role]}</small></span><ChevronDown size={15} /></div><nav>{nav.map(({ label, to, icon: Icon }) => <NavLink key={to} to={to} onClick={() => setOpen(false)} className={({ isActive }) => cn('nav-item', isActive && 'active')}><Icon size={18} /><span>{label}</span></NavLink>)}</nav><div className="sidebar-bottom"><div className="help-card"><div className="help-icon"><Sparkles size={15} /></div><strong>{user.name}</strong><p>{user.email}</p></div><button className="nav-item logout" onClick={signOut}><LogOut size={18} /><span>Sign out</span></button></div></aside><main className="main-area"><header className="topbar"><button className="icon-button menu-button" onClick={() => setOpen(true)} aria-label="Open navigation"><Menu size={21} /></button><div><p className="breadcrumb">Workspace <span>/</span> {current?.label || 'Workspace'}</p><h1>{current?.label || 'Workspace'}</h1></div><div className="topbar-actions"><NotificationBell /><span className="subtle-label">{user.name}</span></div></header><div className="page-content">{children}</div></main></div>
 }
 
 function Dashboard() {
   const user = useAuthStore((state) => state.user)
-  if (user.role === 'staff') return <StaffDashboard />
+  if (user.role === 'staff' || user.role === 'employee') return <StaffDashboard />
   if (user.role === 'client') return <ClientDashboard />
   return <AdminDashboard />
 }
@@ -365,7 +369,7 @@ function Reports() {
   if (!data) return <QueryState loading error="Loading report data..." onRetry={resource.retry} />
   if (!data.trend.length) return <QueryState empty emptyMessage="No evaluations are available for reporting yet." />
   const exportReport = () => downloadData(`lexie-${type}-report.json`, { reportType: type, summary: data.summary, performanceTrend: data.trend, generatedAt: new Date().toISOString() })
-  return <><div className="page-heading"><div><p className="eyebrow">INSIGHT CENTER</p><h2>Reports</h2><p className="muted">A concise read on performance across Lexie.</p></div><div className="profile-actions"><select className="secondary-button" value={type} onChange={(event) => setType(event.target.value)}><option value="summary">Summary report</option><option value="department">Department analytics</option><option value="trend">Performance trends</option></select><button className="primary-button" onClick={exportReport} disabled={!data}><Download size={16} /> Export report</button></div></div><QueryState loading={resource.loading} error={resource.error} onRetry={resource.retry}><><div className="stats-grid"><StatCard label="High performers" value={data.highPerformerCount} detail="Employees with latest reviews" icon={Sparkles} /><StatCard label="Average performance" value={Number(data.summary.average_score).toFixed(1)} detail="Across latest evaluations" tone="blue" icon={BarChart3} /><StatCard label="At risk" value={data.summary.at_risk_count} detail="Latest score below 70" tone="orange" icon={CircleAlert} /><StatCard label="Active employees" value={data.summary.active_employee_count} detail="Included in report" tone="purple" icon={Users} /></div><div className="dashboard-grid"><div className="panel chart-panel"><SectionHeader title="Performance trend" action={<span className="subtle-label">Monthly average</span>} /><div className="chart-wrap tall"><ResponsiveContainer width="100%" height="100%"><LineChart data={data.trend} margin={{ top: 12, right: 8, left: -22, bottom: 0 }}><CartesianGrid vertical={false} stroke="#e6edf0" /><XAxis dataKey="month" axisLine={false} tickLine={false} /><YAxis domain={[0, 100]} axisLine={false} tickLine={false} /><Tooltip /><Line type="monotone" dataKey="score" stroke="#0e8f88" strokeWidth={3} /></LineChart></ResponsiveContainer></div></div><div className="panel chart-panel"><SectionHeader title="Department performance" action={<button className="secondary-button" onClick={exportReport}><Download size={14} /> Export</button>} /><div className="chart-wrap tall"><ResponsiveContainer width="100%" height="100%"><BarChart data={data.summary.department_breakdown} margin={{ top: 12, right: 8, left: -20, bottom: 0 }}><CartesianGrid vertical={false} stroke="#e6edf0" /><XAxis dataKey="name" axisLine={false} tickLine={false} /><YAxis domain={[0, 100]} axisLine={false} tickLine={false} /><Tooltip /><Bar dataKey="score" fill="#123b4a" radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer></div></div></div></></QueryState></>
+  return <><div className="page-heading"><div><p className="eyebrow">INSIGHT CENTER</p><h2>Reports</h2><p className="muted">A concise read on performance across Lexie.</p></div><div className="profile-actions"><select className="secondary-button" value={type} onChange={(event) => setType(event.target.value)}><option value="summary">Summary report</option><option value="department">Department analytics</option><option value="trend">Performance trends</option></select><button className="primary-button" onClick={exportReport} disabled={!data}><Download size={16} /> Export report</button></div></div><QueryState loading={resource.loading} error={resource.error} onRetry={resource.retry}><><div className="stats-grid"><StatCard label="High performers" value={data.highPerformerCount} detail="Employees with latest reviews" icon={Sparkles} /><StatCard label="Average performance" value={Number(data.summary.average_score).toFixed(1)} detail="Across latest evaluations" tone="blue" icon={BarChart3} /><StatCard label="At risk" value={data.summary.at_risk_count} detail="Latest score below 70" tone="orange" icon={CircleAlert} /><StatCard label="Active employees" value={data.summary.active_employee_count} detail="Included in report" tone="purple" icon={Users} /></div><div className="dashboard-grid"><div className="panel chart-panel"><SectionHeader title="Performance trend" action={<span className="subtle-label">Monthly average</span>} /><div className="chart-wrap tall"><ResponsiveContainer width="100%" height="100%"><LineChart data={data.trend} margin={{ top: 12, right: 8, left: -22, bottom: 0 }}><CartesianGrid vertical={false} stroke="var(--line)" /><XAxis dataKey="month" axisLine={false} tickLine={false} /><YAxis domain={[0, 100]} axisLine={false} tickLine={false} /><Tooltip /><Line type="monotone" dataKey="score" stroke="var(--brand-primary)" strokeWidth={3} /></LineChart></ResponsiveContainer></div></div><div className="panel chart-panel"><SectionHeader title="Department performance" action={<button className="secondary-button" onClick={exportReport}><Download size={14} /> Export</button>} /><div className="chart-wrap tall"><ResponsiveContainer width="100%" height="100%"><BarChart data={data.summary.department_breakdown} margin={{ top: 12, right: 8, left: -20, bottom: 0 }}><CartesianGrid vertical={false} stroke="var(--line)" /><XAxis dataKey="name" axisLine={false} tickLine={false} /><YAxis domain={[0, 100]} axisLine={false} tickLine={false} /><Tooltip /><Bar dataKey="score" radius={[4, 4, 0, 0]}>{data.summary.department_breakdown.map((department, index) => <Cell key={`${department.name}-${index}`} fill={department.score < 60 ? 'var(--status-danger)' : department.score < 75 ? 'var(--status-warning)' : 'var(--brand-primary)'} />)}</Bar></BarChart></ResponsiveContainer></div></div></div></></QueryState></>
 }
 
 function SettingsPage() {
@@ -473,7 +477,8 @@ function RequireAuth({ children, roles }) {
 }
 
 function RoleRoutes({ role }) {
-  return <RequireAuth roles={[role]}><Shell><Routes><Route path="overview" element={<Dashboard />} />{role === 'admin' && <><Route path="employees" element={<Employees />} /><Route path="employees/:id" element={<EmployeeProfile />} /><Route path="reports" element={<Reports />} /></>}{role !== 'client' && <><Route path="evaluations" element={<Evaluations />} /><Route path="predictions" element={<Predictions />} /></>}<Route path="settings" element={<SettingsPage />} /><Route path="*" element={<Navigate to="overview" replace />} /></Routes></Shell></RequireAuth>
+  const attendanceRoles = ['admin', 'management', 'hr_manager', 'team_leader', 'staff', 'employee']
+  return <RequireAuth roles={[role]}><Shell><Routes><Route path="overview" element={<Dashboard />} />{role === 'admin' && <><Route path="employees" element={<Employees />} /><Route path="employees/:id" element={<EmployeeProfile />} /><Route path="reports" element={<Reports />} /><Route path="office-locations" element={<OfficeLocationsPage />} /></>}{attendanceRoles.includes(role) && <><Route path="attendance" element={<AttendancePage />} /><Route path="notifications" element={<NotificationsPage />} /></>}{role !== 'client' && <><Route path="evaluations" element={<Evaluations />} /><Route path="predictions" element={<Predictions />} /></>}<Route path="settings" element={<SettingsPage />} /><Route path="*" element={<Navigate to="overview" replace />} /></Routes></Shell></RequireAuth>
 }
 
 function AppConnected() {
@@ -482,7 +487,7 @@ function AppConnected() {
   const initialize = useAuthStore((state) => state.initialize)
   useEffect(() => { void initialize() }, [initialize])
   if (!initialized) return <div className="login-page"><div className="login-panel"><div className="login-card" role="status">Restoring your session...</div></div></div>
-  return <Routes><Route path="/login" element={user ? <Navigate to={roleHome(user.role)} replace /> : <Login />} /><Route path="/admin/*" element={<RoleRoutes role="admin" />} /><Route path="/staff/*" element={<RoleRoutes role="staff" />} /><Route path="/client/*" element={<RoleRoutes role="client" />} /><Route path="*" element={<Navigate to={user ? roleHome(user.role) : '/login'} replace />} /></Routes>
+  return <Routes><Route path="/login" element={user ? <Navigate to={roleHome(user.role)} replace /> : <Login />} /><Route path="/admin/*" element={<RoleRoutes role="admin" />} /><Route path="/management/*" element={<RoleRoutes role="management" />} /><Route path="/hr_manager/*" element={<RoleRoutes role="hr_manager" />} /><Route path="/team_leader/*" element={<RoleRoutes role="team_leader" />} /><Route path="/staff/*" element={<RoleRoutes role="staff" />} /><Route path="/employee/*" element={<RoleRoutes role="employee" />} /><Route path="/client/*" element={<RoleRoutes role="client" />} /><Route path="*" element={<Navigate to={user ? roleHome(user.role) : '/login'} replace />} /></Routes>
 }
 
 export default AppConnected
